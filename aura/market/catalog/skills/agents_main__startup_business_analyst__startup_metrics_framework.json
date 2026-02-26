@@ -1,0 +1,18 @@
+{
+  "id": "skill.market.agents_main.startup_business_analyst.startup_metrics_framework.v1",
+  "name": "market:skill:agents_main:startup_business_analyst:startup_metrics_framework",
+  "vendor": "agents-main",
+  "status": "active",
+  "description": "This skill should be used when the user asks about \"key startup metrics\", \"SaaS metrics\", \"CAC and LTV\", \"unit economics\", \"burn multiple\", \"rule of 40\", \"marketplace metrics\", or requests guidance on tracking and optimizing business performance metrics.",
+  "source_path": "aura/market/catalog/skills/agents_main__startup_business_analyst__startup_metrics_framework.md",
+  "entry": {
+    "type": "markdown",
+    "ref": "aura/market/catalog/skills/agents_main__startup_business_analyst__startup_metrics_framework.md"
+  },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/startup-business-analyst/skills/startup-metrics-framework/SKILL.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

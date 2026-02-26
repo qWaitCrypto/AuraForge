@@ -1,0 +1,22 @@
+{
+  "id": "skill.market.agents_main.observability_monitoring.prometheus_configuration.v1",
+  "name": "market:skill:agents_main:observability_monitoring:prometheus_configuration",
+  "vendor": "agents-main",
+  "status": "active",
+  "description": "Set up Prometheus for comprehensive metric collection, storage, and monitoring of infrastructure and applications. Use when implementing metrics collection, setting up monitoring infrastructure, or configuring alerting systems.",
+  "source_path": "aura/market/catalog/skills/agents_main__observability_monitoring__prometheus_configuration.md",
+  "entry": {
+    "type": "markdown",
+    "ref": "aura/market/catalog/skills/agents_main__observability_monitoring__prometheus_configuration.md"
+  },
+  "output_contract": {
+    "format": "markdown",
+    "sections": []
+  },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent\u9884\u5907/agents-main/agents-main/plugins/observability-monitoring/skills/prometheus-configuration/SKILL.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

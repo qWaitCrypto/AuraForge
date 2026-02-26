@@ -1,0 +1,45 @@
+{
+  "id": "agent.market.fused.qa-expert.v1",
+  "name": "qa-expert",
+  "vendor": "awesome-claude-code-subagents",
+  "status": "active",
+  "summary": "Use this agent when you need comprehensive quality assurance strategy, test planning across the entire development cycle, or quality metrics analysis to improve overall software quality.",
+  "role": "qa-expert",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.developer_essentials.e2e_testing_patterns.v1",
+    "skill.market.agents_main.developer_essentials.code_review_excellence.v1",
+    "skill.market.agents_main.developer_essentials.debugging_strategies.v1",
+    "skill.market.agents_main.accessibility_compliance.wcag_audit_patterns.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.comprehensive_review.full_review.v1",
+    "tool.market.agents_main.comprehensive_review.pr_enhance.v1",
+    "tool.mcp.playwright.browser_navigate.v1",
+    "tool.mcp.playwright.browser_snapshot.v1",
+    "tool.mcp.playwright.browser_evaluate.v1",
+    "tool.mcp.playwright.browser_click.v1",
+    "tool.mcp.playwright.browser_type.v1",
+    "tool.mcp.playwright.browser_take_screenshot.v1"
+  ],
+  "mcp_server_ids": [
+    "mcp.market.playwright.v1"
+  ],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__qa-expert.md",
+    "upstream_primary_repo": "awesome-claude-code-subagents",
+    "upstream_primary_path": "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/04-quality-security/qa-expert.md",
+    "upstream_alternates": [
+      "dev/agent预备/claude-code-sub-agents-main/claude-code-sub-agents-main/agents/quality-testing/qa-expert.md"
+    ],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/awesome-claude-code-subagents.MIT.md",
+    "source_selection_reason": "按来源顺序优先 awesome，且其 QA 策略与质量度量描述更完整。",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "comprehensive_review",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 3
+  }
+}

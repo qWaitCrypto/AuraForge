@@ -1,0 +1,47 @@
+{
+  "id": "agent.market.fused.react-expert.v1",
+  "name": "react-expert",
+  "vendor": "claude-code-subagents",
+  "status": "active",
+  "summary": "React development expert with deep understanding of component architecture, hooks, state management, and performance optimization. Use PROACTIVELY for React refactoring, performance tuning, or complex state handling.",
+  "role": "react-expert",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.frontend_mobile_development.react_state_management.v1",
+    "skill.market.agents_main.javascript_typescript.typescript_advanced_types.v1",
+    "skill.market.agents_main.javascript_typescript.modern_javascript_patterns.v1",
+    "skill.market.agents_main.javascript_typescript.javascript_testing_patterns.v1",
+    "skill.market.agents_main.frontend_mobile_development.tailwind_design_system.v1",
+    "skill.market.agents_main.ui_design.design_system_patterns.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.frontend_mobile_development.component_scaffold.v1",
+    "tool.market.agents_main.javascript_typescript.typescript_scaffold.v1",
+    "tool.market.agents_main.application_performance.performance_optimization.v1",
+    "tool.market.agents_main.unit_testing.test_generate.v1",
+    "tool.market.agents_main.ui_design.create_component.v1",
+    "tool.mcp.playwright.browser_navigate.v1",
+    "tool.mcp.playwright.browser_snapshot.v1",
+    "tool.mcp.playwright.browser_evaluate.v1",
+    "tool.mcp.playwright.browser_click.v1",
+    "tool.mcp.playwright.browser_type.v1",
+    "tool.mcp.playwright.browser_take_screenshot.v1"
+  ],
+  "mcp_server_ids": [
+    "mcp.market.playwright.v1"
+  ],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__react-expert.md",
+    "upstream_primary_repo": "claude-code-subagents",
+    "upstream_primary_path": "dev/agent预备/claude-code-subagents-main/claude-code-subagents-main/agents/react-expert.md",
+    "upstream_alternates": [],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/claude-code-subagents.MIT.md",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "javascript_typescript",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 4
+  }
+}

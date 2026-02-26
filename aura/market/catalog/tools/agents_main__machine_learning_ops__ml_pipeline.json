@@ -1,0 +1,35 @@
+{
+  "id": "tool.market.agents_main.machine_learning_ops.ml_pipeline.v1",
+  "name": "market:tool:agents_main:machine_learning_ops:ml_pipeline",
+  "vendor": "agents-main",
+  "status": "active",
+  "kind": "composite",
+  "runtime_name": "market__agents_main__machine_learning_ops__ml_pipeline",
+  "aliases": [
+    "ml-pipeline",
+    "ml_pipeline"
+  ],
+  "description": "Machine Learning Pipeline - Multi-Agent MLOps Orchestration",
+  "entrypoint": {
+    "type": "unknown",
+    "ref": "aura/market/catalog/tools/agents_main__machine_learning_ops__ml_pipeline.md"
+  },
+  "params_schema": {
+    "type": "object",
+    "properties": {}
+  },
+  "effects": {
+    "side_effect_level": "low",
+    "idempotent": false
+  },
+  "policy": {
+    "approval_required": false,
+    "scope": []
+  },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/machine-learning-ops/commands/ml-pipeline.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

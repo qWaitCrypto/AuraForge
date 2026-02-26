@@ -1,0 +1,37 @@
+{
+  "id": "agent.market.fused.performance-monitor.v1",
+  "name": "performance-monitor",
+  "vendor": "awesome-claude-code-subagents",
+  "status": "active",
+  "summary": "Use when establishing observability infrastructure to track system metrics, detect performance anomalies, and optimize resource usage across multi-agent environments.",
+  "role": "performance-monitor",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.observability_monitoring.prometheus_configuration.v1",
+    "skill.market.agents_main.observability_monitoring.grafana_dashboards.v1",
+    "skill.market.agents_main.observability_monitoring.distributed_tracing.v1",
+    "skill.market.agents_main.observability_monitoring.slo_implementation.v1",
+    "skill.market.agents_main.incident_response.incident_runbook_templates.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.observability_monitoring.monitor_setup.v1",
+    "tool.market.agents_main.observability_monitoring.slo_implement.v1",
+    "tool.market.agents_main.application_performance.performance_optimization.v1",
+    "tool.market.agents_main.incident_response.incident_response.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__performance-monitor.md",
+    "upstream_primary_repo": "awesome-claude-code-subagents",
+    "upstream_primary_path": "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/09-meta-orchestration/performance-monitor.md",
+    "upstream_alternates": [],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/awesome-claude-code-subagents.MIT.md",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "observability_monitoring",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 5
+  }
+}

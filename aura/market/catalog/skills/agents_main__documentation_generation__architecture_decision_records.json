@@ -1,0 +1,17 @@
+{
+  "id": "skill.market.agents_main.documentation_generation.architecture_decision_records.v1",
+  "name": "market:skill:agents_main:documentation_generation:architecture_decision_records",
+  "vendor": "agents-main",
+  "status": "active",
+  "entry": {
+    "type": "markdown",
+    "ref": "aura/market/catalog/skills/agents_main__documentation_generation__architecture_decision_records.md"
+  },
+  "requires_tool_ids": [],
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/documentation-generation/skills/architecture-decision-records/SKILL.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "id": "mcp.market.magic.v1",
+  "name": "magic",
+  "vendor": "magic",
+  "status": "active",
+  "enabled": false,
+  "transport": "unknown",
+  "auth": { "type": "none", "scopes": [] },
+  "healthcheck": { "interval_sec": 60, "timeout_sec": 3 },
+  "timeout_sec": 60,
+  "provides_tools": [
+    {
+      "remote_name": "21st_magic_component_builder",
+      "tool_id": "tool.mcp.magic.21st_magic_component_builder.v1",
+      "description": "Generate UI components from a prompt."
+    },
+    {
+      "remote_name": "21st_magic_component_inspiration",
+      "tool_id": "tool.mcp.magic.21st_magic_component_inspiration.v1",
+      "description": "Generate UI inspiration and variants."
+    },
+    {
+      "remote_name": "21st_magic_component_refiner",
+      "tool_id": "tool.mcp.magic.21st_magic_component_refiner.v1",
+      "description": "Refine an existing component based on feedback."
+    }
+  ],
+  "metadata": {
+    "notes": "Market template only; configure a real MCP server in .aura/config/mcp.json to enable."
+  }
+}
+

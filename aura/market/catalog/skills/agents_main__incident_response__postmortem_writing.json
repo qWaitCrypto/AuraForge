@@ -1,0 +1,22 @@
+{
+  "id": "skill.market.agents_main.incident_response.postmortem_writing.v1",
+  "name": "market:skill:agents_main:incident_response:postmortem_writing",
+  "vendor": "agents-main",
+  "status": "active",
+  "description": "Write effective blameless postmortems with root cause analysis, timelines, and action items. Use when conducting incident reviews, writing postmortem documents, or improving incident response processes.",
+  "source_path": "aura/market/catalog/skills/agents_main__incident_response__postmortem_writing.md",
+  "entry": {
+    "type": "markdown",
+    "ref": "aura/market/catalog/skills/agents_main__incident_response__postmortem_writing.md"
+  },
+  "output_contract": {
+    "format": "markdown",
+    "sections": []
+  },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent\u9884\u5907/agents-main/agents-main/plugins/incident-response/skills/postmortem-writing/SKILL.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

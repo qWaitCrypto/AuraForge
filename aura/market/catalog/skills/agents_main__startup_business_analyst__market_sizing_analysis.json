@@ -1,0 +1,18 @@
+{
+  "id": "skill.market.agents_main.startup_business_analyst.market_sizing_analysis.v1",
+  "name": "market:skill:agents_main:startup_business_analyst:market_sizing_analysis",
+  "vendor": "agents-main",
+  "status": "active",
+  "description": "This skill should be used when the user asks to \"calculate TAM\", \"determine SAM\", \"estimate SOM\", \"size the market\", \"calculate market opportunity\", \"what's the total addressable market\", or requests market sizing analysis for a startup or business opportunity.",
+  "source_path": "aura/market/catalog/skills/agents_main__startup_business_analyst__market_sizing_analysis.md",
+  "entry": {
+    "type": "markdown",
+    "ref": "aura/market/catalog/skills/agents_main__startup_business_analyst__market_sizing_analysis.md"
+  },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/startup-business-analyst/skills/market-sizing-analysis/SKILL.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

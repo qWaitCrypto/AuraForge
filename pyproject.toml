@@ -17,3 +17,12 @@ aura = "aura.cli:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["aura*"]
+
+[tool.setuptools.package-data]
+"aura.market" = [
+    "catalog/*.json",
+    "catalog/*.md",
+    "catalog/*/*.json",
+    "catalog/*/*.md",
+    "catalog/*/.gitkeep",
+]

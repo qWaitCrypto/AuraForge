@@ -5,6 +5,7 @@ from typing import Any, ClassVar
 
 from ..llm.router import ModelRouter
 from ..models import WorkSpec
+from ..registry import SpecResolutionError, SpecResolver
 from ..stores import ArtifactStore
 from ..subagents.presets import get_preset, preset_input_schema
 from ..subagents.runner import run_subagent
@@ -18,18 +19,24 @@ class SubagentRunTool:
     tool_registry: ToolRegistry
     tool_runtime: ToolRuntime
     artifact_store: ArtifactStore
+    spec_resolver: SpecResolver | None = None
 
     name: ClassVar[str] = "subagent__run"
     description: ClassVar[str] = (
         "Run a bounded delegated task in an isolated subagent context. "
         "Use for verification (preset=verifier), documents (preset=doc_worker), spreadsheets (preset=sheet_worker), "
         "browser automation (preset=browser_worker), or file operations (preset=file_ops_worker). "
+        "Prefer `agent_id` for spec-driven routing; `preset` remains supported for compatibility. "
         "The runner enforces a per-run tool allowlist, prevents recursion, and never nests interactive approvals: "
         "if an approval-required tool is requested, it stops and returns an actionable report."
     )
     input_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
         "properties": {
+            "agent_id": {
+                "type": "string",
+                "description": "Spec agent id or alias (preferred). Must resolve to a subagent_preset agent.",
+            },
             "preset": preset_input_schema(),
             "task": {"type": "string", "description": "Delegated task instruction."},
             "context": {
@@ -134,16 +141,44 @@ class SubagentRunTool:
                 "description": "Max tool calls executed inside the subagent.",
             },
         },
-        "required": ["preset", "task", "work_spec"],
+        "required": ["task", "work_spec"],
         "additionalProperties": False,
     }
 
     def execute(self, *, args: dict[str, Any], project_root, context: ToolExecutionContext | None = None) -> dict[str, Any]:
         default_max_tool_calls = 10
+
+        bundle = None
+        resolved_agent_id: str | None = None
+
+        agent_id_raw = str(args.get("agent_id") or "").strip()
         preset_name = str(args.get("preset") or "").strip()
+
+        if agent_id_raw:
+            if self.spec_resolver is None:
+                raise ValueError("agent_id is not available in this runtime (spec resolver missing).")
+            try:
+                bundle = self.spec_resolver.resolve_subagent(agent_id_raw)
+            except SpecResolutionError as e:
+                raise ValueError(f"Invalid agent_id: {e}") from e
+            resolved_agent_id = bundle.agent.id
+            preset_name = bundle.agent.execution.preset_name or preset_name
+
+        if not preset_name:
+            raise ValueError("Missing either 'agent_id' or 'preset'.")
+
         preset = get_preset(preset_name)
         if preset is None:
             raise ValueError(f"Unknown preset: {preset_name!r}")
+
+        # Compatibility path: map legacy preset names back to a registered agent id when possible.
+        if bundle is None and self.spec_resolver is not None:
+            try:
+                bundle = self.spec_resolver.resolve_subagent(preset_name, strict=False)
+            except Exception:
+                bundle = None
+            else:
+                resolved_agent_id = bundle.agent.id
 
         task = str(args.get("task") or "").strip()
         if not task:
@@ -151,7 +186,13 @@ class SubagentRunTool:
 
         allowlist = args.get("tool_allowlist")
         if allowlist is None:
-            allowlist_patterns = list(preset.default_allowlist)
+            allowlist_patterns: list[str] = []
+            if bundle is not None:
+                allowlist_patterns = bundle.tool_runtime_names()
+                if not allowlist_patterns:
+                    allowlist_patterns = list(bundle.agent.execution.default_allowlist)
+            if not allowlist_patterns:
+                allowlist_patterns = list(preset.default_allowlist)
         else:
             if not isinstance(allowlist, list) or any(not isinstance(x, str) for x in allowlist):
                 raise ValueError("Invalid 'tool_allowlist' (expected list of strings).")
@@ -160,6 +201,8 @@ class SubagentRunTool:
         max_turns = args.get("max_turns")
         if max_turns is None:
             max_turns_int = preset.limits.max_turns
+            if bundle is not None and bundle.agent.execution.default_max_turns is not None:
+                max_turns_int = int(bundle.agent.execution.default_max_turns)
         else:
             if isinstance(max_turns, bool) or not isinstance(max_turns, int) or max_turns < 1:
                 raise ValueError("Invalid 'max_turns' (expected integer >= 1).")
@@ -167,7 +210,10 @@ class SubagentRunTool:
 
         max_tool_calls = args.get("max_tool_calls")
         if max_tool_calls is None:
-            max_tool_calls_int = min(preset.limits.max_tool_calls, default_max_tool_calls)
+            default_budget = preset.limits.max_tool_calls
+            if bundle is not None and bundle.agent.execution.default_max_tool_calls is not None:
+                default_budget = int(bundle.agent.execution.default_max_tool_calls)
+            max_tool_calls_int = min(default_budget, default_max_tool_calls)
         else:
             if isinstance(max_tool_calls, bool) or not isinstance(max_tool_calls, int) or max_tool_calls < 1:
                 raise ValueError("Invalid 'max_tool_calls' (expected integer >= 1).")
@@ -185,6 +231,7 @@ class SubagentRunTool:
             raise ValueError(f"Invalid 'work_spec': {e}") from e
 
         return run_subagent(
+            agent_id=resolved_agent_id,
             preset=preset,
             task=task,
             extra_context=args.get("context"),

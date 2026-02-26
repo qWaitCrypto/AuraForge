@@ -1,0 +1,41 @@
+{
+  "id": "agent.market.fused.mlops-engineer.v1",
+  "name": "mlops-engineer",
+  "vendor": "agents-main",
+  "status": "active",
+  "summary": "Build comprehensive ML pipelines, experiment tracking, and model registries with MLflow, Kubeflow, and modern MLOps tools. Implements automated training, deployment, and monitoring across cloud platforms. Use PROACTIVELY for ML infrastructure, experiment management, or pipeline automation.",
+  "role": "mlops-engineer",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.machine_learning_ops.ml_pipeline_workflow.v1",
+    "skill.market.agents_main.data_engineering.airflow_dag_patterns.v1",
+    "skill.market.agents_main.data_engineering.data_quality_frameworks.v1",
+    "skill.market.agents_main.observability_monitoring.prometheus_configuration.v1",
+    "skill.market.agents_main.observability_monitoring.slo_implementation.v1",
+    "skill.market.agents_main.cloud_infrastructure.terraform_module_library.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.machine_learning_ops.ml_pipeline.v1",
+    "tool.market.agents_main.data_engineering.data_pipeline.v1",
+    "tool.market.agents_main.cicd_automation.workflow_automate.v1",
+    "tool.market.agents_main.observability_monitoring.monitor_setup.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__mlops-engineer.md",
+    "upstream_primary_repo": "agents-main",
+    "upstream_primary_path": "dev/agent预备/agents-main/agents-main/plugins/machine-learning-ops/agents/mlops-engineer.md",
+    "upstream_alternates": [
+      "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/05-data-ai/mlops-engineer.md"
+    ],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md",
+    "source_selection_reason": "agents-main 优先并提供完整 MLOps 基建与流水线能力，最适合作基线。",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "machine_learning_ops",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 3
+  }
+}

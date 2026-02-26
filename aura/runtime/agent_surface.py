@@ -93,7 +93,7 @@ def build_agent_surface(
         [
             "- Use `update_plan` to manage a DAG plan for subagent execution (use `depends_on` for dependencies).",
             "- When you need subagents, prefer: `update_plan` -> `dag__execute_next` loop (do not hand-dispatch unless necessary).",
-            "- For automated DAG runs, include `metadata.preset` + `metadata.work_spec` for each subagent node (Plan-as-Contract).",
+            "- For automated DAG runs, include `metadata.agent_id` (preferred) or `metadata.preset`, plus `metadata.work_spec` for each subagent node.",
             "- For DAG: keep nodes `pending` until they are actually dispatched; avoid pre-marking `in_progress`.",
         ]
         if has_dag_plan_tool
@@ -145,5 +145,6 @@ def build_agent_surface(
             f"Status: {spec.status}{label}",
             "Rules:",
             "- Do not modify `spec/` via generic file tools when sealed; use spec workflow tools.",
+            "- Use `spec__list_assets` / `spec__get_asset` to inspect normalized agent/skill/tool/mcp registry.",
         ]
     )

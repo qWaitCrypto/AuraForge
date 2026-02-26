@@ -1,0 +1,18 @@
+{
+  "id": "tool.mcp.playwright.browser_navigate.v1",
+  "name": "mcp:playwright:browser_navigate",
+  "vendor": "mcp",
+  "status": "draft",
+  "kind": "mcp_proxy",
+  "runtime_name": "mcp__playwright__browser_navigate",
+  "aliases": ["mcp__playwright__browser_navigate", "playwright:browser_navigate", "browser_navigate"],
+  "description": "Navigate a browser page to a URL (Playwright MCP).",
+  "entrypoint": { "type": "mcp", "ref": "playwright:browser_navigate" },
+  "params_schema": { "type": "object", "properties": {} },
+  "effects": { "side_effect_level": "high", "idempotent": false },
+  "runtime": { "timeout_sec": 60, "retry": { "max_attempts": 1 } },
+  "policy": { "approval_required": true, "approval_level": "high", "scope": [] },
+  "mcp_binding": { "server_id": "mcp.market.playwright.v1", "remote_tool": "browser_navigate" },
+  "metadata": { "notes": "Market template; runtime MCP discovery may overwrite schemas and binding server_id." }
+}
+

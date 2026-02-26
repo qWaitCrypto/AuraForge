@@ -1,0 +1,47 @@
+{
+  "id": "agent.market.fused.cloud-architect.v1",
+  "name": "cloud-architect",
+  "vendor": "agents-main",
+  "status": "active",
+  "summary": "Expert cloud architect specializing in AWS/Azure/GCP multi-cloud infrastructure design, advanced IaC (Terraform/OpenTofu/CDK), FinOps cost optimization, and modern architectural patterns. Masters serverless, microserv...",
+  "role": "cloud-architect",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.cloud_infrastructure.multi_cloud_architecture.v1",
+    "skill.market.agents_main.cloud_infrastructure.hybrid_cloud_networking.v1",
+    "skill.market.agents_main.cloud_infrastructure.cost_optimization.v1",
+    "skill.market.agents_main.cloud_infrastructure.terraform_module_library.v1",
+    "skill.market.agents_main.cloud_infrastructure.istio_traffic_management.v1",
+    "skill.market.agents_main.cloud_infrastructure.linkerd_patterns.v1",
+    "skill.market.agents_main.cloud_infrastructure.service_mesh_observability.v1",
+    "skill.market.agents_main.cloud_infrastructure.mtls_configuration.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.database_cloud_optimization.cost_optimize.v1",
+    "tool.market.agents_main.c4_architecture.c4_architecture.v1",
+    "tool.market.agents_main.cicd_automation.workflow_automate.v1",
+    "tool.market.agents_main.observability_monitoring.monitor_setup.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__cloud-architect.md",
+    "upstream_primary_repo": "agents-main",
+    "upstream_primary_path": "dev/agent预备/agents-main/agents-main/plugins/cloud-infrastructure/agents/cloud-architect.md",
+    "upstream_alternates": [
+      "dev/agent预备/agents-main/agents-main/plugins/cicd-automation/agents/cloud-architect.md",
+      "dev/agent预备/agents-main/agents-main/plugins/database-cloud-optimization/agents/cloud-architect.md",
+      "dev/agent预备/agents-main/agents-main/plugins/deployment-validation/agents/cloud-architect.md",
+      "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/03-infrastructure/cloud-architect.md",
+      "dev/agent预备/claude-code-sub-agents-main/claude-code-sub-agents-main/agents/infrastructure/cloud-architect.md"
+    ],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md",
+    "source_selection_reason": "优先 agents-main 且 `cloud-infrastructure` 比 CI/CD、验证或数据库场景更通用可迁移。",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "cloud_infrastructure",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 1
+  }
+}

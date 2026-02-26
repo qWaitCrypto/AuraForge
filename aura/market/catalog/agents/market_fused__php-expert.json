@@ -1,0 +1,38 @@
+{
+  "id": "agent.market.fused.php-expert.v1",
+  "name": "php-expert",
+  "vendor": "claude-code-subagents",
+  "status": "active",
+  "summary": "Specialized in developing efficient, secure, and modern PHP applications adhering to best practices.",
+  "role": "php-expert",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.developer_essentials.auth_implementation_patterns.v1",
+    "skill.market.agents_main.developer_essentials.sql_optimization_patterns.v1",
+    "skill.market.agents_main.developer_essentials.error_handling_patterns.v1",
+    "skill.market.agents_main.developer_essentials.e2e_testing_patterns.v1",
+    "skill.market.agents_main.framework_migration.dependency_upgrade.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.api_testing_observability.api_mock.v1",
+    "tool.market.agents_main.unit_testing.test_generate.v1",
+    "tool.market.agents_main.security_scanning.security_sast.v1",
+    "tool.market.agents_main.dependency_management.deps_audit.v1",
+    "tool.market.agents_main.code_refactoring.refactor_clean.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__php-expert.md",
+    "upstream_primary_repo": "claude-code-subagents",
+    "upstream_primary_path": "dev/agent预备/claude-code-subagents-main/claude-code-subagents-main/agents/php-expert.md",
+    "upstream_alternates": [],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/claude-code-subagents.MIT.md",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "web_scripting",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 6
+  }
+}

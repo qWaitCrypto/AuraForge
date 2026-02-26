@@ -1,0 +1,24 @@
+{
+  "id": "tool.market.agents_main.ui_design.create_component.v1",
+  "name": "market:tool:agents_main:ui_design:create_component",
+  "vendor": "agents-main",
+  "status": "active",
+  "kind": "composite",
+  "runtime_name": "market__agents_main__ui_design__create_component",
+  "aliases": ["create-component", "create_component"],
+  "description": "Guided component creation with proper patterns",
+  "entrypoint": {
+    "type": "unknown",
+    "ref": "aura/market/catalog/tools/agents_main__ui_design__create_component.md"
+  },
+  "params_schema": { "type": "object", "properties": {} },
+  "effects": { "side_effect_level": "low", "idempotent": false },
+  "policy": { "approval_required": false, "scope": [] },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/ui-design/commands/create-component.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}
+

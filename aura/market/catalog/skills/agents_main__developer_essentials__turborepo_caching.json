@@ -1,0 +1,17 @@
+{
+  "id": "skill.market.agents_main.developer_essentials.turborepo_caching.v1",
+  "name": "market:skill:agents_main:developer_essentials:turborepo_caching",
+  "vendor": "agents-main",
+  "status": "active",
+  "entry": {
+    "type": "markdown",
+    "ref": "aura/market/catalog/skills/agents_main__developer_essentials__turborepo_caching.md"
+  },
+  "requires_tool_ids": [],
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/developer-essentials/skills/turborepo-caching/SKILL.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

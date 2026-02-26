@@ -1,0 +1,35 @@
+{
+  "id": "tool.market.agents_main.llm_application_dev.langchain_agent.v1",
+  "name": "market:tool:agents_main:llm_application_dev:langchain_agent",
+  "vendor": "agents-main",
+  "status": "active",
+  "kind": "composite",
+  "runtime_name": "market__agents_main__llm_application_dev__langchain_agent",
+  "aliases": [
+    "langchain-agent",
+    "langchain_agent"
+  ],
+  "description": "Create LangGraph-based agent with modern patterns",
+  "entrypoint": {
+    "type": "unknown",
+    "ref": "aura/market/catalog/tools/agents_main__llm_application_dev__langchain_agent.md"
+  },
+  "params_schema": {
+    "type": "object",
+    "properties": {}
+  },
+  "effects": {
+    "side_effect_level": "low",
+    "idempotent": false
+  },
+  "policy": {
+    "approval_required": false,
+    "scope": []
+  },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/llm-application-dev/commands/langchain-agent.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

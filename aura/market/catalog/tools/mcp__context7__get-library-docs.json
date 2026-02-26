@@ -1,0 +1,18 @@
+{
+  "id": "tool.mcp.context7.get_library_docs.v1",
+  "name": "mcp:context7:get-library-docs",
+  "vendor": "mcp",
+  "status": "draft",
+  "kind": "mcp_proxy",
+  "runtime_name": "mcp__context7__get-library-docs",
+  "aliases": ["mcp__context7__get-library-docs", "context7:get-library-docs", "get-library-docs"],
+  "description": "Fetch library documentation for a resolved identifier (Context7 MCP).",
+  "entrypoint": { "type": "mcp", "ref": "context7:get-library-docs" },
+  "params_schema": { "type": "object", "properties": {} },
+  "effects": { "side_effect_level": "high", "idempotent": false },
+  "runtime": { "timeout_sec": 60, "retry": { "max_attempts": 1 } },
+  "policy": { "approval_required": true, "approval_level": "high", "scope": [] },
+  "mcp_binding": { "server_id": "mcp.market.context7.v1", "remote_tool": "get-library-docs" },
+  "metadata": { "notes": "Market template; runtime MCP discovery may overwrite schemas and binding server_id." }
+}
+

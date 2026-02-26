@@ -1,0 +1,22 @@
+{
+  "id": "skill.market.agents_main.incident_response.incident_runbook_templates.v1",
+  "name": "market:skill:agents_main:incident_response:incident_runbook_templates",
+  "vendor": "agents-main",
+  "status": "active",
+  "description": "Create structured incident response runbooks with step-by-step procedures, escalation paths, and recovery actions. Use when building runbooks, responding to incidents, or establishing incident response procedures.",
+  "source_path": "aura/market/catalog/skills/agents_main__incident_response__incident_runbook_templates.md",
+  "entry": {
+    "type": "markdown",
+    "ref": "aura/market/catalog/skills/agents_main__incident_response__incident_runbook_templates.md"
+  },
+  "output_contract": {
+    "format": "markdown",
+    "sections": []
+  },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent\u9884\u5907/agents-main/agents-main/plugins/incident-response/skills/incident-runbook-templates/SKILL.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

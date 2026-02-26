@@ -1,0 +1,41 @@
+{
+  "id": "agent.market.fused.kubernetes-specialist.v1",
+  "name": "kubernetes-specialist",
+  "vendor": "awesome-claude-code-subagents",
+  "status": "active",
+  "summary": "Use this agent when you need to design, deploy, configure, or troubleshoot Kubernetes clusters and workloads in production environments.",
+  "role": "kubernetes-specialist",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.kubernetes_operations.gitops_workflow.v1",
+    "skill.market.agents_main.kubernetes_operations.helm_chart_scaffolding.v1",
+    "skill.market.agents_main.kubernetes_operations.k8s_manifest_generator.v1",
+    "skill.market.agents_main.kubernetes_operations.k8s_security_policies.v1",
+    "skill.market.agents_main.cloud_infrastructure.mtls_configuration.v1",
+    "skill.market.agents_main.cloud_infrastructure.service_mesh_observability.v1",
+    "skill.market.agents_main.cloud_infrastructure.istio_traffic_management.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.deployment_validation.config_validate.v1",
+    "tool.market.agents_main.cicd_automation.workflow_automate.v1",
+    "tool.market.agents_main.observability_monitoring.monitor_setup.v1",
+    "tool.market.agents_main.observability_monitoring.slo_implement.v1",
+    "tool.market.agents_main.security_scanning.security_hardening.v1",
+    "tool.market.agents_main.distributed_debugging.debug_trace.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__kubernetes-specialist.md",
+    "upstream_primary_repo": "awesome-claude-code-subagents",
+    "upstream_primary_path": "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/03-infrastructure/kubernetes-specialist.md",
+    "upstream_alternates": [],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/awesome-claude-code-subagents.MIT.md",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "kubernetes_operations",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 4
+  }
+}

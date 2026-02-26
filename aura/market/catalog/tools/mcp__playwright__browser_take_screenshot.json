@@ -1,0 +1,18 @@
+{
+  "id": "tool.mcp.playwright.browser_take_screenshot.v1",
+  "name": "mcp:playwright:browser_take_screenshot",
+  "vendor": "mcp",
+  "status": "draft",
+  "kind": "mcp_proxy",
+  "runtime_name": "mcp__playwright__browser_take_screenshot",
+  "aliases": ["mcp__playwright__browser_take_screenshot", "playwright:browser_take_screenshot", "browser_take_screenshot"],
+  "description": "Take a screenshot of the page (Playwright MCP).",
+  "entrypoint": { "type": "mcp", "ref": "playwright:browser_take_screenshot" },
+  "params_schema": { "type": "object", "properties": {} },
+  "effects": { "side_effect_level": "high", "idempotent": false },
+  "runtime": { "timeout_sec": 60, "retry": { "max_attempts": 1 } },
+  "policy": { "approval_required": true, "approval_level": "high", "scope": [] },
+  "mcp_binding": { "server_id": "mcp.market.playwright.v1", "remote_tool": "browser_take_screenshot" },
+  "metadata": { "notes": "Market template; runtime MCP discovery may overwrite schemas and binding server_id." }
+}
+

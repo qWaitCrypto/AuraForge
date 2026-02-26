@@ -1,0 +1,42 @@
+{
+  "id": "agent.market.fused.platform-engineer.v1",
+  "name": "platform-engineer",
+  "vendor": "awesome-claude-code-subagents",
+  "status": "active",
+  "summary": "Use when building or improving internal developer platforms (IDPs), designing self-service infrastructure, or optimizing developer workflows to reduce friction and accelerate delivery. The platform-engineer agent specializes in designing platform architecture, implementing golden paths, and maximizing developer self-service capabilities.",
+  "role": "platform-engineer",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.cloud_infrastructure.multi_cloud_architecture.v1",
+    "skill.market.agents_main.cloud_infrastructure.cost_optimization.v1",
+    "skill.market.agents_main.kubernetes_operations.gitops_workflow.v1",
+    "skill.market.agents_main.cicd_automation.deployment_pipeline_design.v1",
+    "skill.market.agents_main.cicd_automation.secrets_management.v1",
+    "skill.market.agents_main.observability_monitoring.slo_implementation.v1",
+    "skill.market.agents_main.developer_essentials.monorepo_management.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.cicd_automation.workflow_automate.v1",
+    "tool.market.agents_main.deployment_validation.config_validate.v1",
+    "tool.market.agents_main.observability_monitoring.monitor_setup.v1",
+    "tool.market.agents_main.observability_monitoring.slo_implement.v1",
+    "tool.market.agents_main.conductor.setup.v1",
+    "tool.market.agents_main.conductor.status.v1",
+    "tool.market.agents_main.conductor.manage.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__platform-engineer.md",
+    "upstream_primary_repo": "awesome-claude-code-subagents",
+    "upstream_primary_path": "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/03-infrastructure/platform-engineer.md",
+    "upstream_alternates": [],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/awesome-claude-code-subagents.MIT.md",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "cloud_infrastructure",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 2
+  }
+}

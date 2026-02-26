@@ -1,0 +1,38 @@
+{
+  "id": "agent.market.fused.machine-learning-engineer.v1",
+  "name": "machine-learning-engineer",
+  "vendor": "awesome-claude-code-subagents",
+  "status": "active",
+  "summary": "Use this agent when you need to deploy, optimize, or serve machine learning models at scale in production environments.",
+  "role": "machine-learning-engineer",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.machine_learning_ops.ml_pipeline_workflow.v1",
+    "skill.market.agents_main.python_development.python_performance_optimization.v1",
+    "skill.market.agents_main.python_development.python_observability.v1",
+    "skill.market.agents_main.backend_development.microservices_patterns.v1",
+    "skill.market.agents_main.observability_monitoring.distributed_tracing.v1",
+    "skill.market.agents_main.observability_monitoring.slo_implementation.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.machine_learning_ops.ml_pipeline.v1",
+    "tool.market.agents_main.application_performance.performance_optimization.v1",
+    "tool.market.agents_main.observability_monitoring.monitor_setup.v1",
+    "tool.market.agents_main.deployment_validation.config_validate.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__machine-learning-engineer.md",
+    "upstream_primary_repo": "awesome-claude-code-subagents",
+    "upstream_primary_path": "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/05-data-ai/machine-learning-engineer.md",
+    "upstream_alternates": [],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/awesome-claude-code-subagents.MIT.md",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "machine_learning_ops",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 5
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "id": "tool.mcp.playwright.browser_evaluate.v1",
+  "name": "mcp:playwright:browser_evaluate",
+  "vendor": "mcp",
+  "status": "draft",
+  "kind": "mcp_proxy",
+  "runtime_name": "mcp__playwright__browser_evaluate",
+  "aliases": ["mcp__playwright__browser_evaluate", "playwright:browser_evaluate", "browser_evaluate"],
+  "description": "Evaluate JavaScript in the page context (Playwright MCP).",
+  "entrypoint": { "type": "mcp", "ref": "playwright:browser_evaluate" },
+  "params_schema": { "type": "object", "properties": {} },
+  "effects": { "side_effect_level": "high", "idempotent": false },
+  "runtime": { "timeout_sec": 60, "retry": { "max_attempts": 1 } },
+  "policy": { "approval_required": true, "approval_level": "high", "scope": [] },
+  "mcp_binding": { "server_id": "mcp.market.playwright.v1", "remote_tool": "browser_evaluate" },
+  "metadata": { "notes": "Market template; runtime MCP discovery may overwrite schemas and binding server_id." }
+}
+

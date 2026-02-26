@@ -1,0 +1,44 @@
+{
+  "id": "agent.market.fused.workflow-orchestrator.v1",
+  "name": "workflow-orchestrator",
+  "vendor": "awesome-claude-code-subagents",
+  "status": "active",
+  "summary": "Use this agent when you need to design, implement, or optimize complex business process workflows with multiple states, error handling, and transaction management.",
+  "role": "workflow-orchestrator",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.conductor.workflow_patterns.v1",
+    "skill.market.agents_main.conductor.track_management.v1",
+    "skill.market.agents_main.conductor.context_driven_development.v1",
+    "skill.market.agents_main.backend_development.workflow_orchestration_patterns.v1",
+    "skill.market.agents_main.backend_development.saga_orchestration.v1",
+    "skill.market.agents_main.agent_teams.task_coordination_strategies.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.conductor.setup.v1",
+    "tool.market.agents_main.conductor.new_track.v1",
+    "tool.market.agents_main.conductor.implement.v1",
+    "tool.market.agents_main.conductor.status.v1",
+    "tool.market.agents_main.conductor.manage.v1",
+    "tool.market.agents_main.conductor.revert.v1",
+    "tool.market.agents_main.agent_teams.team_delegate.v1",
+    "tool.market.awesome_claude_code_subagents.subagent_catalog.list.v1",
+    "tool.market.awesome_claude_code_subagents.subagent_catalog.search.v1",
+    "tool.market.awesome_claude_code_subagents.subagent_catalog.fetch.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__workflow-orchestrator.md",
+    "upstream_primary_repo": "awesome-claude-code-subagents",
+    "upstream_primary_path": "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/09-meta-orchestration/workflow-orchestrator.md",
+    "upstream_alternates": [],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/awesome-claude-code-subagents.MIT.md",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "conductor",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 5
+  }
+}

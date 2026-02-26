@@ -1,0 +1,35 @@
+{
+  "id": "agent.market.fused.kubernetes-expert.v1",
+  "name": "kubernetes-expert",
+  "vendor": "claude-code-subagents",
+  "status": "active",
+  "summary": "Master Kubernetes for container orchestration, pod management, and cluster optimization. Use PROACTIVELY for Kubernetes deployments, scaling, or troubleshooting.",
+  "role": "kubernetes-expert",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.kubernetes_operations.gitops_workflow.v1",
+    "skill.market.agents_main.kubernetes_operations.helm_chart_scaffolding.v1",
+    "skill.market.agents_main.kubernetes_operations.k8s_manifest_generator.v1",
+    "skill.market.agents_main.kubernetes_operations.k8s_security_policies.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.deployment_validation.config_validate.v1",
+    "tool.market.agents_main.observability_monitoring.monitor_setup.v1",
+    "tool.market.agents_main.cicd_automation.workflow_automate.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__kubernetes-expert.md",
+    "upstream_primary_repo": "claude-code-subagents",
+    "upstream_primary_path": "dev/agent预备/claude-code-subagents-main/claude-code-subagents-main/agents/kubernetes-expert.md",
+    "upstream_alternates": [],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/claude-code-subagents.MIT.md",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "kubernetes_operations",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 3
+  }
+}

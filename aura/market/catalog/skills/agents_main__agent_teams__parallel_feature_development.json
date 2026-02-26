@@ -1,0 +1,17 @@
+{
+  "id": "skill.market.agents_main.agent_teams.parallel_feature_development.v1",
+  "name": "market:skill:agents_main:agent_teams:parallel_feature_development",
+  "vendor": "agents-main",
+  "status": "active",
+  "entry": {
+    "type": "markdown",
+    "ref": "aura/market/catalog/skills/agents_main__agent_teams__parallel_feature_development.md"
+  },
+  "requires_tool_ids": [],
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/agent-teams/skills/parallel-feature-development/SKILL.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

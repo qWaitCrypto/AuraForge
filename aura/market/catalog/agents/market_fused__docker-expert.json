@@ -1,0 +1,41 @@
+{
+  "id": "agent.market.fused.docker-expert.v1",
+  "name": "docker-expert",
+  "vendor": "awesome-claude-code-subagents",
+  "status": "active",
+  "summary": "Use this agent when you need to build, optimize, or secure Docker container images and orchestration for production environments.",
+  "role": "docker-expert",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.cicd_automation.deployment_pipeline_design.v1",
+    "skill.market.agents_main.cicd_automation.secrets_management.v1",
+    "skill.market.agents_main.cloud_infrastructure.mtls_configuration.v1",
+    "skill.market.agents_main.kubernetes_operations.k8s_security_policies.v1",
+    "skill.market.agents_main.cloud_infrastructure.cost_optimization.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.deployment_validation.config_validate.v1",
+    "tool.market.agents_main.cicd_automation.workflow_automate.v1",
+    "tool.market.agents_main.security_scanning.security_dependencies.v1",
+    "tool.market.agents_main.security_scanning.security_hardening.v1",
+    "tool.market.agents_main.observability_monitoring.monitor_setup.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__docker-expert.md",
+    "upstream_primary_repo": "awesome-claude-code-subagents",
+    "upstream_primary_path": "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/03-infrastructure/docker-expert.md",
+    "upstream_alternates": [
+      "dev/agent预备/claude-code-subagents-main/claude-code-subagents-main/agents/docker-expert.md"
+    ],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/awesome-claude-code-subagents.MIT.md",
+    "source_selection_reason": "按来源优先选 awesome，其内容兼顾构建、优化与安全的通用需求。",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "cloud_infrastructure",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 2
+  }
+}

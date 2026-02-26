@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ..models import WorkSpec
+from ..registry import SpecResolutionError, SpecResolver
 from ..plan import PlanItem, PlanStore, StepStatus, validate_plan
 from ..subagents.presets import get_preset, list_presets
 
@@ -11,6 +12,7 @@ from ..subagents.presets import get_preset, list_presets
 @dataclass(frozen=True, slots=True)
 class UpdatePlanTool:
     store: PlanStore
+    spec_resolver: SpecResolver | None = None
     name: str = "update_plan"
     description: str = (
         "Updates the task plan.\n"
@@ -45,9 +47,13 @@ class UpdatePlanTool:
                                 "type": "object",
                                 "description": (
                                     "Per-node execution contract (required). "
-                                    "Must include `preset` and `work_spec` for automated DAG execution."
+                                    "Must include `agent_id` (preferred) or `preset`, plus `work_spec` for automated DAG execution."
                                 ),
                                 "properties": {
+                                    "agent_id": {
+                                        "type": "string",
+                                        "description": "Spec agent id/alias (preferred). Must resolve to a subagent agent.",
+                                    },
                                     "preset": {
                                         "type": "string",
                                         "enum": list_presets(),
@@ -124,7 +130,7 @@ class UpdatePlanTool:
                                         "additionalProperties": True,
                                     },
                                 },
-                                "required": ["preset", "work_spec"],
+                                "required": ["work_spec"],
                                 "additionalProperties": True,
                             },
                         },
@@ -185,13 +191,47 @@ class UpdatePlanTool:
                 raise ValueError("Invalid metadata (expected object).")
             metadata = dict(metadata_raw)
 
+            agent_id: str | None = None
+            agent_id_raw = metadata.get("agent_id")
+            if isinstance(agent_id_raw, str) and agent_id_raw.strip():
+                agent_id = agent_id_raw.strip()
+
+            preset_name: str | None = None
             preset_raw = metadata.get("preset")
-            if not isinstance(preset_raw, str) or not preset_raw.strip():
-                raise ValueError("Missing or invalid metadata.preset (expected non-empty string).")
-            preset_name = preset_raw.strip()
-            if get_preset(preset_name) is None:
-                raise ValueError(f"Unknown metadata.preset: {preset_name!r}")
-            metadata["preset"] = preset_name
+            if isinstance(preset_raw, str) and preset_raw.strip():
+                preset_name = preset_raw.strip()
+
+            if agent_id is None and preset_name is None:
+                raise ValueError("Missing metadata.agent_id or metadata.preset.")
+
+            if agent_id is not None and self.spec_resolver is not None:
+                try:
+                    bundle = self.spec_resolver.resolve_subagent(agent_id)
+                except SpecResolutionError as e:
+                    raise ValueError(f"Invalid metadata.agent_id: {e}") from e
+                agent_id = bundle.agent.id
+                resolved_preset = bundle.agent.execution.preset_name
+                if preset_name is None and isinstance(resolved_preset, str) and resolved_preset.strip():
+                    preset_name = resolved_preset.strip()
+                elif (
+                    preset_name is not None
+                    and isinstance(resolved_preset, str)
+                    and resolved_preset.strip()
+                    and preset_name != resolved_preset.strip()
+                ):
+                    raise ValueError(
+                        f"metadata.agent_id/preset mismatch: agent {agent_id!r} requires preset {resolved_preset!r}."
+                    )
+            elif agent_id is not None and self.spec_resolver is None and preset_name is None:
+                raise ValueError("metadata.agent_id requires resolver support; provide metadata.preset as fallback.")
+
+            if preset_name is not None:
+                if get_preset(preset_name) is None:
+                    raise ValueError(f"Unknown metadata.preset: {preset_name!r}")
+                metadata["preset"] = preset_name
+
+            if agent_id is not None:
+                metadata["agent_id"] = agent_id
 
             ws_raw = metadata.get("work_spec")
             if not isinstance(ws_raw, dict):

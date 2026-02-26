@@ -1,0 +1,33 @@
+{
+  "id": "agent.market.fused.data-analyst.v1",
+  "name": "data-analyst",
+  "vendor": "awesome-claude-code-subagents",
+  "status": "active",
+  "summary": "Use when you need to extract insights from business data, create dashboards and reports, or perform statistical analysis to support decision-making.",
+  "role": "data-analyst",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.business_analytics.data_storytelling.v1",
+    "skill.market.agents_main.business_analytics.kpi_dashboard_design.v1",
+    "skill.market.agents_main.developer_essentials.sql_optimization_patterns.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.data_engineering.data_pipeline.v1",
+    "tool.market.agents_main.data_engineering.data_driven_feature.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__data-analyst.md",
+    "upstream_primary_repo": "awesome-claude-code-subagents",
+    "upstream_primary_path": "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/05-data-ai/data-analyst.md",
+    "upstream_alternates": [],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/awesome-claude-code-subagents.MIT.md",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "business_analytics",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 1
+  }
+}

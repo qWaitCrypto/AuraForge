@@ -1,0 +1,45 @@
+{
+  "id": "agent.market.fused.langchain-expert.v1",
+  "name": "langchain-expert",
+  "vendor": "claude-code-subagents",
+  "status": "active",
+  "summary": "Expert in LangChain with focus on document processing, pipeline construction, and optimization.",
+  "role": "langchain-expert",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.llm_application_dev.langchain_architecture.v1",
+    "skill.market.agents_main.llm_application_dev.prompt_engineering_patterns.v1",
+    "skill.market.agents_main.llm_application_dev.rag_implementation.v1",
+    "skill.market.agents_main.llm_application_dev.embedding_strategies.v1",
+    "skill.market.agents_main.llm_application_dev.hybrid_search_implementation.v1",
+    "skill.market.agents_main.llm_application_dev.similarity_search_patterns.v1",
+    "skill.market.agents_main.llm_application_dev.vector_index_tuning.v1",
+    "skill.market.agents_main.llm_application_dev.llm_evaluation.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.llm_application_dev.langchain_agent.v1",
+    "tool.market.agents_main.llm_application_dev.prompt_optimize.v1",
+    "tool.market.agents_main.llm_application_dev.ai_assistant.v1",
+    "tool.mcp.context7.resolve_library_id.v1",
+    "tool.mcp.context7.get_library_docs.v1",
+    "tool.mcp.sequential_thinking.sequentialthinking.v1"
+  ],
+  "mcp_server_ids": [
+    "mcp.market.context7.v1",
+    "mcp.market.sequential_thinking.v1"
+  ],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__langchain-expert.md",
+    "upstream_primary_repo": "claude-code-subagents",
+    "upstream_primary_path": "dev/agent预备/claude-code-subagents-main/claude-code-subagents-main/agents/langchain-expert.md",
+    "upstream_alternates": [],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/claude-code-subagents.MIT.md",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "llm_application_dev",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 5
+  }
+}

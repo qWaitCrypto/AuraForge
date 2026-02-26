@@ -1,0 +1,36 @@
+{
+  "id": "tool.market.agents_main.security_scanning.security_sast.v1",
+  "name": "market:tool:agents_main:security_scanning:security_sast",
+  "vendor": "agents-main",
+  "status": "draft",
+  "kind": "composite",
+  "runtime_name": "market__agents_main__security_scanning__security_sast",
+  "aliases": [
+    "security-sast",
+    "security_sast"
+  ],
+  "description": "Static Application Security Testing (SAST) for code vulnerability analysis across multiple languages and frameworks",
+  "entrypoint": {
+    "type": "unknown",
+    "ref": "aura/market/catalog/tools/agents_main__security_scanning__security_sast.md"
+  },
+  "params_schema": {
+    "type": "object",
+    "properties": {}
+  },
+  "effects": {
+    "side_effect_level": "high",
+    "idempotent": false
+  },
+  "policy": {
+    "approval_required": true,
+    "scope": []
+  },
+  "metadata": {
+    "risk_level": "high",
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/security-scanning/commands/security-sast.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

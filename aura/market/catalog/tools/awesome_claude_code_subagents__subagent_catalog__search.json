@@ -1,0 +1,24 @@
+{
+  "id": "tool.market.awesome_claude_code_subagents.subagent_catalog.search.v1",
+  "name": "market:tool:awesome_claude_code_subagents:subagent_catalog:search",
+  "vendor": "awesome-claude-code-subagents",
+  "status": "active",
+  "kind": "composite",
+  "runtime_name": "market__awesome_claude_code_subagents__subagent_catalog__search",
+  "aliases": ["search"],
+  "description": "Search the awesome-claude-code-subagents catalog. Use when user wants to find, discover, or browse available subagents by name, category, or capability.",
+  "entrypoint": {
+    "type": "unknown",
+    "ref": "aura/market/catalog/tools/awesome_claude_code_subagents__subagent_catalog__search.md"
+  },
+  "params_schema": { "type": "object", "properties": {} },
+  "effects": { "side_effect_level": "low", "idempotent": false },
+  "policy": { "approval_required": false, "scope": [] },
+  "metadata": {
+    "upstream_repo": "awesome-claude-code-subagents",
+    "upstream_path": "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/tools/subagent-catalog/search.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/awesome-claude-code-subagents.MIT.md"
+  }
+}
+

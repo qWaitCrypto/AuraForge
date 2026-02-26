@@ -1,0 +1,42 @@
+{
+  "id": "agent.market.fused.golang-pro.v1",
+  "name": "golang-pro",
+  "vendor": "agents-main",
+  "status": "active",
+  "summary": "Master Go 1.21+ with modern patterns, advanced concurrency, performance optimization, and production-ready microservices. Expert in the latest Go ecosystem including generics, workspaces, and cutting-edge frameworks. Use PROACTIVELY for Go development, architecture design, or performance optimization.",
+  "role": "golang-pro",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.systems_programming.go_concurrency_patterns.v1",
+    "skill.market.agents_main.systems_programming.memory_safety_patterns.v1",
+    "skill.market.agents_main.backend_development.microservices_patterns.v1",
+    "skill.market.agents_main.developer_essentials.debugging_strategies.v1",
+    "skill.market.agents_main.developer_essentials.error_handling_patterns.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.backend_development.feature_development.v1",
+    "tool.market.agents_main.unit_testing.test_generate.v1",
+    "tool.market.agents_main.debugging_toolkit.smart_debug.v1",
+    "tool.market.agents_main.application_performance.performance_optimization.v1",
+    "tool.market.agents_main.c4_architecture.c4_architecture.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__golang-pro.md",
+    "upstream_primary_repo": "agents-main",
+    "upstream_primary_path": "dev/agent预备/agents-main/agents-main/plugins/systems-programming/agents/golang-pro.md",
+    "upstream_alternates": [
+      "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/02-language-specialists/golang-pro.md",
+      "dev/agent预备/claude-code-sub-agents-main/claude-code-sub-agents-main/agents/development/golang-pro.md"
+    ],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md",
+    "source_selection_reason": "agents-main 优先且 systems-programming 版本在并发与生产实践上最通用。",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "systems_programming",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 6
+  }
+}

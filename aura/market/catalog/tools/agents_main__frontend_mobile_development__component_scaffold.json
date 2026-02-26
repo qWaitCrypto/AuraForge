@@ -1,0 +1,35 @@
+{
+  "id": "tool.market.agents_main.frontend_mobile_development.component_scaffold.v1",
+  "name": "market:tool:agents_main:frontend_mobile_development:component_scaffold",
+  "vendor": "agents-main",
+  "status": "active",
+  "kind": "composite",
+  "runtime_name": "market__agents_main__frontend_mobile_development__component_scaffold",
+  "aliases": [
+    "component-scaffold",
+    "component_scaffold"
+  ],
+  "description": "React/React Native Component Scaffolding",
+  "entrypoint": {
+    "type": "unknown",
+    "ref": "aura/market/catalog/tools/agents_main__frontend_mobile_development__component_scaffold.md"
+  },
+  "params_schema": {
+    "type": "object",
+    "properties": {}
+  },
+  "effects": {
+    "side_effect_level": "low",
+    "idempotent": false
+  },
+  "policy": {
+    "approval_required": false,
+    "scope": []
+  },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/frontend-mobile-development/commands/component-scaffold.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

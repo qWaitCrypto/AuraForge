@@ -1,0 +1,35 @@
+{
+  "id": "tool.market.agents_main.distributed_debugging.debug_trace.v1",
+  "name": "market:tool:agents_main:distributed_debugging:debug_trace",
+  "vendor": "agents-main",
+  "status": "active",
+  "kind": "composite",
+  "runtime_name": "market__agents_main__distributed_debugging__debug_trace",
+  "aliases": [
+    "debug-trace",
+    "debug_trace"
+  ],
+  "description": "You are a debugging expert specializing in setting up comprehensive debugging environments, distributed tracing, and diagnostic tools. Configure debugging workflows, implement tracing solutions, and establish troubleshooting practices for development and production environments.",
+  "entrypoint": {
+    "type": "unknown",
+    "ref": "aura/market/catalog/tools/agents_main__distributed_debugging__debug_trace.md"
+  },
+  "params_schema": {
+    "type": "object",
+    "properties": {}
+  },
+  "effects": {
+    "side_effect_level": "low",
+    "idempotent": false
+  },
+  "policy": {
+    "approval_required": false,
+    "scope": []
+  },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/distributed-debugging/commands/debug-trace.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

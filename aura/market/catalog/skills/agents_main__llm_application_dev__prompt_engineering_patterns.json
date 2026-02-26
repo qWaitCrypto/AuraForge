@@ -1,0 +1,18 @@
+{
+  "id": "skill.market.agents_main.llm_application_dev.prompt_engineering_patterns.v1",
+  "name": "market:skill:agents_main:llm_application_dev:prompt_engineering_patterns",
+  "vendor": "agents-main",
+  "status": "active",
+  "description": "Master advanced prompt engineering techniques to maximize LLM performance, reliability, and controllability in production. Use when optimizing prompts, improving LLM outputs, or designing production prompt templates.",
+  "source_path": "aura/market/catalog/skills/agents_main__llm_application_dev__prompt_engineering_patterns.md",
+  "entry": {
+    "type": "markdown",
+    "ref": "aura/market/catalog/skills/agents_main__llm_application_dev__prompt_engineering_patterns.md"
+  },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/llm-application-dev/skills/prompt-engineering-patterns/SKILL.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

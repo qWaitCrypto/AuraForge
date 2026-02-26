@@ -41,7 +41,8 @@ async def _dispatch_single_node(
     *,
     node: PlanItem,
     subagent_tool: SubagentRunTool,
-    preset_name: str,
+    agent_id: str | None,
+    preset_name: str | None,
     work_spec: dict[str, Any],
     project_root: Path,
     context: ToolExecutionContext | None,
@@ -60,13 +61,17 @@ async def _dispatch_single_node(
         enhanced_task = node.step
 
     def _run_sync() -> dict[str, Any]:
+        run_args: dict[str, Any] = {
+            "task": enhanced_task,
+            "context": {"text": f"Node ID: {node.id}"},
+            "work_spec": work_spec,
+        }
+        if isinstance(agent_id, str) and agent_id.strip():
+            run_args["agent_id"] = agent_id.strip()
+        if isinstance(preset_name, str) and preset_name.strip():
+            run_args["preset"] = preset_name.strip()
         return subagent_tool.execute(
-            args={
-                "preset": preset_name,
-                "task": enhanced_task,
-                "context": {"text": f"Node ID: {node.id}"},
-                "work_spec": work_spec,
-            },
+            args=run_args,
             project_root=project_root,
             context=context,
         )
@@ -217,7 +222,8 @@ async def dispatch_nodes_parallel(
     *,
     nodes: list[PlanItem],
     subagent_tool: SubagentRunTool,
-    preset_selector: Callable[[PlanItem], str],
+    preset_selector: Callable[[PlanItem], str | None] | None,
+    agent_selector: Callable[[PlanItem], str | None] | None,
     work_spec_selector: Callable[[PlanItem], dict[str, Any]],
     project_root: Path,
     context: ToolExecutionContext | None = None,
@@ -240,7 +246,8 @@ async def dispatch_nodes_parallel(
             _dispatch_single_node(
                 node=node,
                 subagent_tool=subagent_tool,
-                preset_name=preset_selector(node),
+                agent_id=agent_selector(node) if agent_selector is not None else None,
+                preset_name=preset_selector(node) if preset_selector is not None else None,
                 work_spec=work_spec_selector(node),
                 project_root=project_root,
                 context=context,

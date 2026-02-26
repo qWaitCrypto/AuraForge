@@ -1,0 +1,38 @@
+{
+  "id": "agent.market.fused.mobile-app-developer.v1",
+  "name": "mobile-app-developer",
+  "vendor": "awesome-claude-code-subagents",
+  "status": "active",
+  "summary": "Use this agent when developing iOS and Android mobile applications with focus on native or cross-platform implementation, performance optimization, and platform-specific user experience.",
+  "role": "mobile-app-developer",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.frontend_mobile_development.react_native_architecture.v1",
+    "skill.market.agents_main.frontend_mobile_development.react_state_management.v1",
+    "skill.market.agents_main.ui_design.mobile_android_design.v1",
+    "skill.market.agents_main.ui_design.mobile_ios_design.v1",
+    "skill.market.agents_main.ui_design.react_native_design.v1",
+    "skill.market.agents_main.javascript_typescript.typescript_advanced_types.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.frontend_mobile_development.component_scaffold.v1",
+    "tool.market.agents_main.multi_platform_apps.multi_platform.v1",
+    "tool.market.agents_main.application_performance.performance_optimization.v1",
+    "tool.market.agents_main.ui_design.create_component.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__mobile-app-developer.md",
+    "upstream_primary_repo": "awesome-claude-code-subagents",
+    "upstream_primary_path": "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/07-specialized-domains/mobile-app-developer.md",
+    "upstream_alternates": [],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/awesome-claude-code-subagents.MIT.md",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "frontend_mobile_development",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 4
+  }
+}

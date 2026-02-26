@@ -1,0 +1,18 @@
+{
+  "id": "tool.mcp.magic.21st_magic_component_refiner.v1",
+  "name": "mcp:magic:21st_magic_component_refiner",
+  "vendor": "mcp",
+  "status": "draft",
+  "kind": "mcp_proxy",
+  "runtime_name": "mcp__magic__21st_magic_component_refiner",
+  "aliases": ["mcp__magic__21st_magic_component_refiner", "magic:21st_magic_component_refiner", "21st_magic_component_refiner"],
+  "description": "Refine an existing component based on feedback (Magic MCP).",
+  "entrypoint": { "type": "mcp", "ref": "magic:21st_magic_component_refiner" },
+  "params_schema": { "type": "object", "properties": {} },
+  "effects": { "side_effect_level": "high", "idempotent": false },
+  "runtime": { "timeout_sec": 60, "retry": { "max_attempts": 1 } },
+  "policy": { "approval_required": true, "approval_level": "high", "scope": [] },
+  "mcp_binding": { "server_id": "mcp.market.magic.v1", "remote_tool": "21st_magic_component_refiner" },
+  "metadata": { "notes": "Market template; runtime MCP discovery may overwrite schemas and binding server_id." }
+}
+

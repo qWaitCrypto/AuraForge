@@ -1,0 +1,19 @@
+{
+  "id": "skill.market.agents_main.api_scaffolding.fastapi_templates.v1",
+  "name": "market:skill:agents_main:api_scaffolding:fastapi_templates",
+  "vendor": "agents-main",
+  "status": "active",
+  "description": "Create production-ready FastAPI projects with async patterns, dependency injection, and comprehensive error handling. Use when building new FastAPI applications or setting up backend API projects.",
+  "source_path": "aura/market/catalog/skills/agents_main__api_scaffolding__fastapi_templates.md",
+  "entry": {
+    "type": "markdown",
+    "ref": "aura/market/catalog/skills/agents_main__api_scaffolding__fastapi_templates.md"
+  },
+  "requires_tool_ids": [],
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/api-scaffolding/skills/fastapi-templates/SKILL.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

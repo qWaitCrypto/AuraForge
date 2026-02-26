@@ -1,0 +1,23 @@
+{
+  "id": "tool.market.agents_main.conductor.status.v1",
+  "name": "market:tool:agents_main:conductor:status",
+  "vendor": "agents-main",
+  "status": "active",
+  "kind": "composite",
+  "runtime_name": "market__agents_main__conductor__status",
+  "aliases": ["status"],
+  "description": "Display project status, active tracks, and next actions",
+  "entrypoint": {
+    "type": "unknown",
+    "ref": "aura/market/catalog/tools/agents_main__conductor__status.md"
+  },
+  "params_schema": { "type": "object", "properties": {} },
+  "effects": { "side_effect_level": "low", "idempotent": false },
+  "policy": { "approval_required": false, "scope": [] },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/conductor/commands/status.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

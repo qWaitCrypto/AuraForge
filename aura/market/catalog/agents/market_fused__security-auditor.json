@@ -1,0 +1,51 @@
+{
+  "id": "agent.market.fused.security-auditor.v1",
+  "name": "security-auditor",
+  "vendor": "agents-main",
+  "status": "active",
+  "summary": "Expert security auditor specializing in DevSecOps, comprehensive cybersecurity, and compliance frameworks. Masters vulnerability assessment, threat modeling, secure authentication (OAuth2/OIDC), OWASP standards, cloud security, and security automation. Handles DevSecOps integration, compliance (GDPR/HIPAA/SOC2), and incident response. Use PROACTIVELY for security audits, DevSecOps, or compliance implementation.",
+  "role": "security-auditor",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.security_scanning.attack_tree_construction.v1",
+    "skill.market.agents_main.security_scanning.stride_analysis_patterns.v1",
+    "skill.market.agents_main.security_scanning.security_requirement_extraction.v1",
+    "skill.market.agents_main.security_scanning.sast_configuration.v1",
+    "skill.market.agents_main.security_scanning.threat_mitigation_mapping.v1",
+    "skill.market.agents_main.cicd_automation.secrets_management.v1",
+    "skill.market.agents_main.payment_processing.pci_compliance.v1",
+    "skill.market.agents_main.hr_legal_compliance.gdpr_data_handling.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.security_compliance.compliance_check.v1",
+    "tool.market.agents_main.security_scanning.security_sast.v1",
+    "tool.market.agents_main.security_scanning.security_dependencies.v1",
+    "tool.market.agents_main.security_scanning.security_hardening.v1",
+    "tool.market.agents_main.deployment_validation.config_validate.v1",
+    "tool.market.agents_main.frontend_mobile_security.xss_scan.v1",
+    "tool.market.agents_main.incident_response.smart_fix.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__security-auditor.md",
+    "upstream_primary_repo": "agents-main",
+    "upstream_primary_path": "dev/agent预备/agents-main/agents-main/plugins/security-compliance/agents/security-auditor.md",
+    "upstream_alternates": [
+      "dev/agent预备/agents-main/agents-main/plugins/backend-development/agents/security-auditor.md",
+      "dev/agent预备/agents-main/agents-main/plugins/comprehensive-review/agents/security-auditor.md",
+      "dev/agent预备/agents-main/agents-main/plugins/full-stack-orchestration/agents/security-auditor.md",
+      "dev/agent预备/agents-main/agents-main/plugins/security-scanning/agents/security-auditor.md",
+      "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/04-quality-security/security-auditor.md",
+      "dev/agent预备/claude-code-sub-agents-main/claude-code-sub-agents-main/agents/security/security-auditor.md"
+    ],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md",
+    "source_selection_reason": "agents-main 优先且 `security-compliance` 版本在安全审计与合规维度最全面通用。",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "security_compliance",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 4
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "id": "skill.market.agents_main.frontend_mobile_development.tailwind_design_system.v1",
+  "name": "market:skill:agents_main:frontend_mobile_development:tailwind_design_system",
+  "vendor": "agents-main",
+  "status": "active",
+  "description": "Build scalable design systems with Tailwind CSS v4, design tokens, component libraries, and responsive patterns. Use when creating component libraries, implementing design systems, or standardizing UI patterns.",
+  "source_path": "aura/market/catalog/skills/agents_main__frontend_mobile_development__tailwind_design_system.md",
+  "entry": {
+    "type": "markdown",
+    "ref": "aura/market/catalog/skills/agents_main__frontend_mobile_development__tailwind_design_system.md"
+  },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/frontend-mobile-development/skills/tailwind-design-system/SKILL.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

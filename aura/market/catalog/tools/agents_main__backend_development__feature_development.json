@@ -1,0 +1,36 @@
+{
+  "id": "tool.market.agents_main.backend_development.feature_development.v1",
+  "name": "market:tool:agents_main:backend_development:feature_development",
+  "vendor": "agents-main",
+  "status": "draft",
+  "kind": "composite",
+  "runtime_name": "market__agents_main__backend_development__feature_development",
+  "aliases": [
+    "feature-development",
+    "feature_development"
+  ],
+  "description": "Orchestrate end-to-end feature development from requirements to deployment",
+  "entrypoint": {
+    "type": "unknown",
+    "ref": "aura/market/catalog/tools/agents_main__backend_development__feature_development.md"
+  },
+  "params_schema": {
+    "type": "object",
+    "properties": {}
+  },
+  "effects": {
+    "side_effect_level": "high",
+    "idempotent": false
+  },
+  "policy": {
+    "approval_required": true,
+    "scope": []
+  },
+  "metadata": {
+    "risk_level": "high",
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/backend-development/commands/feature-development.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

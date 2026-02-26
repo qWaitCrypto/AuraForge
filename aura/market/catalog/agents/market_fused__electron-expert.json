@@ -1,0 +1,48 @@
+{
+  "id": "agent.market.fused.electron-expert.v1",
+  "name": "electron-expert",
+  "vendor": "claude-code-subagents",
+  "status": "active",
+  "summary": "Specializes in building cross-platform desktop applications using Electron. Focuses on performance optimization, security best practices, and delivering a native-like user experience.",
+  "role": "electron-expert",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.javascript_typescript.modern_javascript_patterns.v1",
+    "skill.market.agents_main.javascript_typescript.typescript_advanced_types.v1",
+    "skill.market.agents_main.frontend_mobile_development.react_state_management.v1",
+    "skill.market.agents_main.ui_design.web_component_design.v1",
+    "skill.market.agents_main.ui_design.responsive_design.v1",
+    "skill.market.agents_main.ui_design.design_system_patterns.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.multi_platform_apps.multi_platform.v1",
+    "tool.market.agents_main.javascript_typescript.typescript_scaffold.v1",
+    "tool.market.agents_main.frontend_mobile_development.component_scaffold.v1",
+    "tool.market.agents_main.ui_design.create_component.v1",
+    "tool.market.agents_main.application_performance.performance_optimization.v1",
+    "tool.market.agents_main.security_scanning.security_hardening.v1",
+    "tool.mcp.playwright.browser_navigate.v1",
+    "tool.mcp.playwright.browser_snapshot.v1",
+    "tool.mcp.playwright.browser_evaluate.v1",
+    "tool.mcp.playwright.browser_click.v1",
+    "tool.mcp.playwright.browser_type.v1",
+    "tool.mcp.playwright.browser_take_screenshot.v1"
+  ],
+  "mcp_server_ids": [
+    "mcp.market.playwright.v1"
+  ],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__electron-expert.md",
+    "upstream_primary_repo": "claude-code-subagents",
+    "upstream_primary_path": "dev/agent预备/claude-code-subagents-main/claude-code-subagents-main/agents/electron-expert.md",
+    "upstream_alternates": [],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/claude-code-subagents.MIT.md",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "multi_platform_apps",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 4
+  }
+}

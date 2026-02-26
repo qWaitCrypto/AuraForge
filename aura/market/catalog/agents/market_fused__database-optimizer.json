@@ -1,0 +1,44 @@
+{
+  "id": "agent.market.fused.database-optimizer.v1",
+  "name": "database-optimizer",
+  "vendor": "agents-main",
+  "status": "active",
+  "summary": "Expert database optimizer specializing in modern performance tuning, query optimization, and scalable architectures. Masters advanced indexing, N+1 resolution, multi-tier caching, partitioning strategies, and cloud da...",
+  "role": "database-optimizer",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.database_design.postgresql.v1",
+    "skill.market.agents_main.developer_essentials.sql_optimization_patterns.v1",
+    "skill.market.agents_main.framework_migration.database_migration.v1",
+    "skill.market.agents_main.cloud_infrastructure.cost_optimization.v1",
+    "skill.market.agents_main.developer_essentials.debugging_strategies.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.database_cloud_optimization.cost_optimize.v1",
+    "tool.market.agents_main.database_migrations.sql_migrations.v1",
+    "tool.market.agents_main.database_migrations.migration_observability.v1",
+    "tool.market.agents_main.observability_monitoring.monitor_setup.v1",
+    "tool.market.agents_main.application_performance.performance_optimization.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__database-optimizer.md",
+    "upstream_primary_repo": "agents-main",
+    "upstream_primary_path": "dev/agent预备/agents-main/agents-main/plugins/database-cloud-optimization/agents/database-optimizer.md",
+    "upstream_alternates": [
+      "dev/agent预备/agents-main/agents-main/plugins/database-migrations/agents/database-optimizer.md",
+      "dev/agent预备/agents-main/agents-main/plugins/observability-monitoring/agents/database-optimizer.md",
+      "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/05-data-ai/database-optimizer.md",
+      "dev/agent预备/claude-code-sub-agents-main/claude-code-sub-agents-main/agents/data-ai/database-optimizer.md"
+    ],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md",
+    "source_selection_reason": "agents-main 优先且 `database-cloud-optimization` 覆盖性能调优主场景最完整。",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "database_cloud_optimization",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 6
+  }
+}

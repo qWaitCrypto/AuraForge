@@ -1,0 +1,25 @@
+{
+  "id": "tool.market.agents_main.git_pr_workflows.git_workflow.v1",
+  "name": "market:tool:agents_main:git_pr_workflows:git_workflow",
+  "vendor": "agents-main",
+  "status": "draft",
+  "kind": "composite",
+  "runtime_name": "market__agents_main__git_pr_workflows__git_workflow",
+  "aliases": ["git-workflow", "git_workflow"],
+  "description": "Orchestrate a full git-to-PR workflow with quality gates and explicit user approval checkpoints.",
+  "entrypoint": {
+    "type": "unknown",
+    "ref": "aura/market/catalog/tools/agents_main__git_pr_workflows__git_workflow.md"
+  },
+  "params_schema": { "type": "object", "properties": {} },
+  "effects": { "side_effect_level": "high", "idempotent": false },
+  "policy": { "approval_required": true, "scope": [] },
+  "metadata": {
+    "risk_level": "high",
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/git-pr-workflows/commands/git-workflow.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}
+

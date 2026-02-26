@@ -1,0 +1,36 @@
+{
+  "id": "tool.market.agents_main.api_testing_observability.api_mock.v1",
+  "name": "market:tool:agents_main:api_testing_observability:api_mock",
+  "vendor": "agents-main",
+  "status": "draft",
+  "kind": "composite",
+  "runtime_name": "market__agents_main__api_testing_observability__api_mock",
+  "aliases": [
+    "api-mock",
+    "api_mock"
+  ],
+  "description": "You are an API mocking expert specializing in creating realistic mock services for development, testing, and demonstration purposes. Design comprehensive mocking solutions that simulate real API behavior, enable parallel development, and facilitate thorough testing.",
+  "entrypoint": {
+    "type": "unknown",
+    "ref": "aura/market/catalog/tools/agents_main__api_testing_observability__api_mock.md"
+  },
+  "params_schema": {
+    "type": "object",
+    "properties": {}
+  },
+  "effects": {
+    "side_effect_level": "high",
+    "idempotent": false
+  },
+  "policy": {
+    "approval_required": true,
+    "scope": []
+  },
+  "metadata": {
+    "risk_level": "high",
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/api-testing-observability/commands/api-mock.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "id": "mcp.market.playwright.v1",
+  "name": "playwright",
+  "vendor": "playwright",
+  "status": "active",
+  "enabled": false,
+  "transport": "unknown",
+  "auth": { "type": "none", "scopes": [] },
+  "healthcheck": { "interval_sec": 60, "timeout_sec": 3 },
+  "timeout_sec": 60,
+  "provides_tools": [
+    {
+      "remote_name": "browser_navigate",
+      "tool_id": "tool.mcp.playwright.browser_navigate.v1",
+      "description": "Navigate a browser page to a URL."
+    },
+    {
+      "remote_name": "browser_snapshot",
+      "tool_id": "tool.mcp.playwright.browser_snapshot.v1",
+      "description": "Capture a page snapshot for inspection."
+    },
+    {
+      "remote_name": "browser_evaluate",
+      "tool_id": "tool.mcp.playwright.browser_evaluate.v1",
+      "description": "Evaluate JavaScript in the page context."
+    },
+    {
+      "remote_name": "browser_click",
+      "tool_id": "tool.mcp.playwright.browser_click.v1",
+      "description": "Click an element on the page."
+    },
+    {
+      "remote_name": "browser_type",
+      "tool_id": "tool.mcp.playwright.browser_type.v1",
+      "description": "Type text into an input element."
+    },
+    {
+      "remote_name": "browser_take_screenshot",
+      "tool_id": "tool.mcp.playwright.browser_take_screenshot.v1",
+      "description": "Take a screenshot of the page."
+    }
+  ],
+  "metadata": {
+    "notes": "Market template only; configure a real MCP server in .aura/config/mcp.json to enable."
+  }
+}
+

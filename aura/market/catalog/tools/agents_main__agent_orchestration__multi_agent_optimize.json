@@ -1,0 +1,35 @@
+{
+  "id": "tool.market.agents_main.agent_orchestration.multi_agent_optimize.v1",
+  "name": "market:tool:agents_main:agent_orchestration:multi_agent_optimize",
+  "vendor": "agents-main",
+  "status": "active",
+  "kind": "composite",
+  "runtime_name": "market__agents_main__agent_orchestration__multi_agent_optimize",
+  "aliases": [
+    "multi-agent-optimize",
+    "multi_agent_optimize"
+  ],
+  "description": "The Multi-Agent Optimization Tool is an advanced AI-driven framework designed to holistically improve system performance through intelligent, coordinated agent-based optimization. Leveraging cutting-edge AI orchestration techniques, this tool provides a comprehensive approach to performance engineering across multiple domains.",
+  "entrypoint": {
+    "type": "unknown",
+    "ref": "aura/market/catalog/tools/agents_main__agent_orchestration__multi_agent_optimize.md"
+  },
+  "params_schema": {
+    "type": "object",
+    "properties": {}
+  },
+  "effects": {
+    "side_effect_level": "low",
+    "idempotent": false
+  },
+  "policy": {
+    "approval_required": false,
+    "scope": []
+  },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/agent-orchestration/commands/multi-agent-optimize.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

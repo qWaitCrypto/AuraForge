@@ -2297,6 +2297,12 @@ def _cmd_init(args: argparse.Namespace) -> int:
     system_dirs = [
         project_root / ".aura" / "config",
         project_root / ".aura" / "policy",
+        project_root / ".aura" / "market",
+        project_root / ".aura" / "market" / "custom",
+        project_root / ".aura" / "market" / "custom" / "tools",
+        project_root / ".aura" / "market" / "custom" / "mcp_servers",
+        project_root / ".aura" / "market" / "custom" / "skills",
+        project_root / ".aura" / "market" / "custom" / "agents",
         project_root / ".aura" / "skills",
         project_root / ".aura" / "sessions",
         project_root / ".aura" / "events",
@@ -2422,6 +2428,26 @@ def _cmd_init(args: argparse.Namespace) -> int:
                     '      "cwd": "",',
                     '      "timeout_s": 60',
                     "    }",
+                    "  }",
+                    "}",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+    market_index_path = project_root / ".aura" / "market" / "custom" / "index.json"
+    if not market_index_path.exists():
+        market_index_path.write_text(
+            "\n".join(
+                [
+                    "{",
+                    '  "version": 1,',
+                    '  "assets": {',
+                    '    "tools": [],',
+                    '    "mcp_servers": [],',
+                    '    "skills": [],',
+                    '    "agents": []',
                     "  }",
                     "}",
                     "",

@@ -1,0 +1,42 @@
+{
+  "id": "agent.market.fused.spring-boot-expert.v1",
+  "name": "spring-boot-expert",
+  "vendor": "claude-code-subagents",
+  "status": "active",
+  "summary": "Expert in developing, optimizing, and maintaining Spring Boot applications with best practices and modern techniques for enterprise-grade applications.",
+  "role": "spring-boot-expert",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.backend_development.api_design_principles.v1",
+    "skill.market.agents_main.backend_development.architecture_patterns.v1",
+    "skill.market.agents_main.backend_development.microservices_patterns.v1",
+    "skill.market.agents_main.backend_development.cqrs_implementation.v1",
+    "skill.market.agents_main.backend_development.event_store_design.v1",
+    "skill.market.agents_main.backend_development.projection_patterns.v1",
+    "skill.market.agents_main.backend_development.saga_orchestration.v1",
+    "skill.market.agents_main.backend_development.workflow_orchestration_patterns.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.backend_development.feature_development.v1",
+    "tool.market.agents_main.unit_testing.test_generate.v1",
+    "tool.market.agents_main.c4_architecture.c4_architecture.v1",
+    "tool.market.agents_main.application_performance.performance_optimization.v1",
+    "tool.market.agents_main.security_scanning.security_sast.v1",
+    "tool.market.agents_main.code_documentation.doc_generate.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__spring-boot-expert.md",
+    "upstream_primary_repo": "claude-code-subagents",
+    "upstream_primary_path": "dev/agent预备/claude-code-subagents-main/claude-code-subagents-main/agents/spring-boot-expert.md",
+    "upstream_alternates": [],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/claude-code-subagents.MIT.md",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "backend_development",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 6
+  }
+}

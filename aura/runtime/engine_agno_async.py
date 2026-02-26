@@ -55,6 +55,7 @@ from .plan import PlanStore, TodoStore
 from .protocol import ArtifactRef, Event, EventKind, Op, OpKind
 from .run_snapshots import PendingToolCall as SnapshotPendingToolCall
 from .run_snapshots import RunSnapshot, delete_run_snapshot, read_run_snapshot, write_run_snapshot
+from .registry import SpecRegistry, SpecResolver
 from .skills import SkillStore
 from .snapshots import GitSnapshotBackend
 from .spec_workflow import SpecProposalStore, SpecStateStore, SpecStore
@@ -86,7 +87,9 @@ from .tools import (
     SnapshotReadTextTool,
     SnapshotRollbackTool,
     SpecApplyTool,
+    SpecGetAssetTool,
     SpecGetTool,
+    SpecListAssetsTool,
     SpecProposeTool,
     SpecQueryTool,
     SpecSealTool,
@@ -170,6 +173,8 @@ _DEFAULT_EXPOSED_TOOL_NAMES: set[str] = {
     # Spec workflow
     "spec__query",
     "spec__get",
+    "spec__list_assets",
+    "spec__get_asset",
     "spec__propose",
     "spec__apply",
     "spec__seal",
@@ -207,6 +212,8 @@ class AgnoAsyncEngine:
     spec_state_store: SpecStateStore = field(init=False)
     spec_proposal_store: SpecProposalStore = field(init=False)
     snapshot_backend: GitSnapshotBackend = field(init=False)
+    spec_registry: SpecRegistry = field(init=False)
+    spec_resolver: SpecResolver = field(init=False)
 
     _history: list[CanonicalMessage] | None = field(default=None, init=False)
     # Knowledge / RAG is implemented as an optional module and is not enabled by default.
@@ -228,6 +235,8 @@ class AgnoAsyncEngine:
         self.spec_state_store = SpecStateStore(project_root=self.project_root)
         self.spec_proposal_store = SpecProposalStore(project_root=self.project_root)
         self.snapshot_backend = GitSnapshotBackend(project_root=self.project_root)
+        self.spec_registry = SpecRegistry(project_root=self.project_root)
+        self.spec_resolver = SpecResolver(registry=self.spec_registry)
 
         if self.max_tool_turns < 1:
             raise ValueError("max_tool_turns must be >= 1")
@@ -252,10 +261,12 @@ class AgnoAsyncEngine:
         registry.register(SkillListTool(self.skill_store))
         registry.register(SkillLoadTool(self.skill_store))
         registry.register(SkillReadFileTool(self.skill_store))
-        registry.register(UpdatePlanTool(self.plan_store))
+        registry.register(UpdatePlanTool(self.plan_store, spec_resolver=self.spec_resolver))
         registry.register(UpdateTodoTool(self.todo_store))
         registry.register(SpecQueryTool(self.spec_store))
         registry.register(SpecGetTool(self.spec_store))
+        registry.register(SpecListAssetsTool(self.spec_registry))
+        registry.register(SpecGetAssetTool(self.spec_registry, self.spec_resolver))
         registry.register(
             SpecProposeTool(self.spec_store, self.spec_proposal_store, self.spec_state_store, self.artifact_store)
         )
@@ -277,6 +288,7 @@ class AgnoAsyncEngine:
                 tool_registry=registry,
                 tool_runtime=tool_runtime,
                 artifact_store=self.artifact_store,
+                spec_resolver=self.spec_resolver,
             )
             registry.register(subagent_tool)
 
@@ -287,6 +299,22 @@ class AgnoAsyncEngine:
 
         self.tool_registry = registry
         self.tool_runtime = tool_runtime
+
+        mcp_cfg = None
+        try:
+            mcp_cfg = load_mcp_config(project_root=self.project_root)
+        except Exception:
+            mcp_cfg = None
+        try:
+            self.spec_registry.refresh_from_runtime(
+                tool_registry=self.tool_registry,
+                skill_store=self.skill_store,
+                mcp_config=mcp_cfg,
+                include_builtin_subagents=True,
+            )
+            self.spec_registry.write_catalog_snapshot()
+        except Exception:
+            pass
 
         # Initialize event sequence from the last persisted event (best-effort).
         last = 0
@@ -1873,6 +1901,7 @@ class AgnoAsyncEngine:
 
         functions: dict[str, Any] = {}
         specs: list[ToolSpec] = []
+        spec_registry_updated = False
 
         try:
             from agno.tools.mcp.mcp import MCPTools
@@ -1894,6 +1923,7 @@ class AgnoAsyncEngine:
                 continue
             if not server.command:
                 continue
+            prefix = _prefix_for(name)
             env = {**get_default_environment(), **dict(server.env or {})}
             server_params = StdioServerParameters(
                 command=server.command,
@@ -1905,22 +1935,54 @@ class AgnoAsyncEngine:
                 server_params=server_params,
                 transport="stdio",
                 timeout_seconds=int(max(1, server.timeout_s)),
-                tool_name_prefix=_prefix_for(name),
+                tool_name_prefix=prefix,
             )
             entered = await stack.enter_async_context(toolkit)
             try:
                 async_functions = entered.get_async_functions()
             except Exception:
                 continue
+            runtime_rows: list[dict[str, Any]] = []
             for tool_name, fn in async_functions.items():
                 functions[tool_name] = fn
+                fn_name = str(getattr(fn, "name", tool_name) or tool_name)
+                remote_name = fn_name
+                if remote_name.startswith(prefix):
+                    remote_name = remote_name[len(prefix) :]
+                if not remote_name and tool_name.startswith(prefix):
+                    remote_name = tool_name[len(prefix) :]
+                if not remote_name:
+                    remote_name = tool_name
+                description = str(getattr(fn, "description", "") or "")
+                input_schema = dict(getattr(fn, "parameters", {}) or {"type": "object", "properties": {}})
+                runtime_rows.append(
+                    {
+                        "runtime_name": tool_name,
+                        "remote_name": remote_name,
+                        "description": description,
+                        "input_schema": input_schema,
+                    }
+                )
                 specs.append(
                     ToolSpec(
-                        name=str(getattr(fn, "name", tool_name)),
-                        description=str(getattr(fn, "description", "") or ""),
-                        input_schema=dict(getattr(fn, "parameters", {}) or {"type": "object", "properties": {}}),
+                        name=fn_name,
+                        description=description,
+                        input_schema=input_schema,
                     )
                 )
+            if runtime_rows:
+                try:
+                    updated = self.spec_registry.backfill_mcp_runtime_tools(server_name=name, tools=runtime_rows)
+                    if updated:
+                        spec_registry_updated = True
+                except Exception:
+                    pass
+
+        if spec_registry_updated:
+            try:
+                self.spec_registry.write_catalog_snapshot()
+            except Exception:
+                pass
 
         return functions, specs
 

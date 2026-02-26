@@ -1,0 +1,39 @@
+{
+  "id": "agent.market.fused.accessibility-tester.v1",
+  "name": "accessibility-tester",
+  "vendor": "awesome-claude-code-subagents",
+  "status": "active",
+  "summary": "Use this agent when you need comprehensive accessibility testing, WCAG compliance verification, or assessment of assistive technology support.",
+  "role": "accessibility-tester",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.accessibility_compliance.screen_reader_testing.v1",
+    "skill.market.agents_main.accessibility_compliance.wcag_audit_patterns.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.accessibility_compliance.accessibility_audit.v1",
+    "tool.mcp.playwright.browser_navigate.v1",
+    "tool.mcp.playwright.browser_snapshot.v1",
+    "tool.mcp.playwright.browser_evaluate.v1",
+    "tool.mcp.playwright.browser_click.v1",
+    "tool.mcp.playwright.browser_type.v1",
+    "tool.mcp.playwright.browser_take_screenshot.v1"
+  ],
+  "mcp_server_ids": [
+    "mcp.market.playwright.v1"
+  ],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__accessibility-tester.md",
+    "upstream_primary_repo": "awesome-claude-code-subagents",
+    "upstream_primary_path": "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/04-quality-security/accessibility-tester.md",
+    "upstream_alternates": [],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/awesome-claude-code-subagents.MIT.md",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "accessibility_compliance",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 1
+  }
+}

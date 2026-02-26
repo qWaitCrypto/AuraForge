@@ -1,0 +1,18 @@
+{
+  "id": "skill.market.agents_main.systems_programming.memory_safety_patterns.v1",
+  "name": "market:skill:agents_main:systems_programming:memory_safety_patterns",
+  "vendor": "agents-main",
+  "status": "active",
+  "description": "Implement memory-safe programming with RAII, ownership, smart pointers, and resource management across Rust, C++, and C. Use when writing safe systems code, managing resources, or preventing memory bugs.",
+  "source_path": "aura/market/catalog/skills/agents_main__systems_programming__memory_safety_patterns.md",
+  "entry": {
+    "type": "markdown",
+    "ref": "aura/market/catalog/skills/agents_main__systems_programming__memory_safety_patterns.md"
+  },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/systems-programming/skills/memory-safety-patterns/SKILL.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

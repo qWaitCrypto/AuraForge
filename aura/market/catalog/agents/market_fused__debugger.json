@@ -1,0 +1,42 @@
+{
+  "id": "agent.market.fused.debugger.v1",
+  "name": "debugger",
+  "vendor": "agents-main",
+  "status": "active",
+  "summary": "Debugging specialist for errors, test failures, and unexpected behavior. Use proactively when encountering any issues.",
+  "role": "debugger",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.developer_essentials.debugging_strategies.v1",
+    "skill.market.agents_main.developer_essentials.error_handling_patterns.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.debugging_toolkit.smart_debug.v1",
+    "tool.market.agents_main.error_diagnostics.error_analysis.v1",
+    "tool.market.agents_main.error_diagnostics.error_trace.v1",
+    "tool.market.agents_main.distributed_debugging.debug_trace.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__debugger.md",
+    "upstream_primary_repo": "agents-main",
+    "upstream_primary_path": "dev/agent预备/agents-main/agents-main/plugins/debugging-toolkit/agents/debugger.md",
+    "upstream_alternates": [
+      "dev/agent预备/agents-main/agents-main/plugins/error-debugging/agents/debugger.md",
+      "dev/agent预备/agents-main/agents-main/plugins/error-diagnostics/agents/debugger.md",
+      "dev/agent预备/agents-main/agents-main/plugins/incident-response/agents/debugger.md",
+      "dev/agent预备/agents-main/agents-main/plugins/unit-testing/agents/debugger.md",
+      "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/04-quality-security/debugger.md",
+      "dev/agent预备/claude-code-sub-agents-main/claude-code-sub-agents-main/agents/quality-testing/debugger.md"
+    ],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md",
+    "source_selection_reason": "agents-main 优先并选择 `debugging-toolkit` 作为最通用的调试入口。",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "debugging_toolkit",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 1
+  }
+}

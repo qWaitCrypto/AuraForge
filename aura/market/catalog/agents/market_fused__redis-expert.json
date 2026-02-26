@@ -1,0 +1,38 @@
+{
+  "id": "agent.market.fused.redis-expert.v1",
+  "name": "redis-expert",
+  "vendor": "claude-code-subagents",
+  "status": "active",
+  "summary": "Expert in Redis for in-memory data storage, caching, and real-time analytics.",
+  "role": "redis-expert",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.developer_essentials.error_handling_patterns.v1",
+    "skill.market.agents_main.developer_essentials.debugging_strategies.v1",
+    "skill.market.agents_main.framework_migration.database_migration.v1",
+    "skill.market.agents_main.cloud_infrastructure.cost_optimization.v1",
+    "skill.market.agents_main.developer_essentials.sql_optimization_patterns.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.database_cloud_optimization.cost_optimize.v1",
+    "tool.market.agents_main.observability_monitoring.monitor_setup.v1",
+    "tool.market.agents_main.debugging_toolkit.smart_debug.v1",
+    "tool.market.agents_main.application_performance.performance_optimization.v1",
+    "tool.market.agents_main.database_migrations.migration_observability.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__redis-expert.md",
+    "upstream_primary_repo": "claude-code-subagents",
+    "upstream_primary_path": "dev/agent预备/claude-code-subagents-main/claude-code-subagents-main/agents/redis-expert.md",
+    "upstream_alternates": [],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/claude-code-subagents.MIT.md",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "database_cloud_optimization",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 6
+  }
+}

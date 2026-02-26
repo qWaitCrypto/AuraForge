@@ -1,0 +1,24 @@
+{
+  "id": "tool.market.agents_main.tdd_workflows.tdd_green.v1",
+  "name": "market:tool:agents_main:tdd_workflows:tdd_green",
+  "vendor": "agents-main",
+  "license_path": "aura/market/catalog/licenses/agents-main.MIT.md",
+  "status": "active",
+  "kind": "composite",
+  "runtime_name": "market__agents_main__tdd_workflows__tdd_green",
+  "aliases": ["tdd-green"],
+  "description": "Implement minimal code to make failing tests pass in TDD green phase",
+  "entrypoint": {
+    "type": "unknown",
+    "ref": "aura/market/catalog/tools/agents_main__tdd_workflows__tdd_green.md"
+  },
+  "params_schema": { "type": "object", "properties": {} },
+  "effects": { "side_effect_level": "low", "idempotent": false },
+  "policy": { "approval_required": false, "scope": [] },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/tdd-workflows/commands/tdd-green.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

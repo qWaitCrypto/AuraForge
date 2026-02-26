@@ -1,0 +1,44 @@
+{
+  "id": "agent.market.fused.temporal-python-pro.v1",
+  "name": "temporal-python-pro",
+  "vendor": "agents-main",
+  "status": "active",
+  "summary": "Master Temporal workflow orchestration with Python SDK. Implements durable workflows, saga patterns, and distributed transactions. Covers async/await, testing strategies, and production deployment. Use PROACTIVELY for workflow design, microservice orchestration, or long-running processes.",
+  "role": "temporal-python-pro",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.backend_development.workflow_orchestration_patterns.v1",
+    "skill.market.agents_main.backend_development.saga_orchestration.v1",
+    "skill.market.agents_main.backend_development.temporal_python_testing.v1",
+    "skill.market.agents_main.backend_development.microservices_patterns.v1",
+    "skill.market.agents_main.python_development.async_python_patterns.v1",
+    "skill.market.agents_main.python_development.python_testing_patterns.v1",
+    "skill.market.agents_main.python_development.python_resilience.v1",
+    "skill.market.agents_main.python_development.python_error_handling.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.backend_development.feature_development.v1",
+    "tool.market.agents_main.unit_testing.test_generate.v1",
+    "tool.market.agents_main.debugging_toolkit.smart_debug.v1",
+    "tool.market.agents_main.incident_response.smart_fix.v1",
+    "tool.market.agents_main.code_documentation.doc_generate.v1",
+    "tool.market.awesome_claude_code_subagents.subagent_catalog.list.v1",
+    "tool.market.awesome_claude_code_subagents.subagent_catalog.search.v1",
+    "tool.market.awesome_claude_code_subagents.subagent_catalog.fetch.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__temporal-python-pro.md",
+    "upstream_primary_repo": "agents-main",
+    "upstream_primary_path": "dev/agent预备/agents-main/agents-main/plugins/backend-development/agents/temporal-python-pro.md",
+    "upstream_alternates": [],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "backend_development",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 6
+  }
+}

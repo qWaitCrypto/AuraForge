@@ -1,0 +1,57 @@
+{
+  "id": "agent.market.fused.test-automator.v1",
+  "name": "test-automator",
+  "vendor": "agents-main",
+  "status": "active",
+  "summary": "Master AI-powered test automation with modern frameworks, self-healing tests, and comprehensive quality engineering. Build scalable testing strategies with advanced CI/CD integration. Use PROACTIVELY for testing automation or quality assurance.",
+  "role": "test-automator",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.developer_essentials.e2e_testing_patterns.v1",
+    "skill.market.agents_main.javascript_typescript.javascript_testing_patterns.v1",
+    "skill.market.agents_main.python_development.python_testing_patterns.v1",
+    "skill.market.agents_main.accessibility_compliance.wcag_audit_patterns.v1",
+    "skill.market.agents_main.developer_essentials.debugging_strategies.v1",
+    "skill.market.agents_main.developer_essentials.error_handling_patterns.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.unit_testing.test_generate.v1",
+    "tool.market.agents_main.tdd_workflows.tdd_red.v1",
+    "tool.market.agents_main.tdd_workflows.tdd_green.v1",
+    "tool.market.agents_main.tdd_workflows.tdd_refactor.v1",
+    "tool.market.agents_main.tdd_workflows.tdd_cycle.v1",
+    "tool.market.agents_main.performance_testing_review.ai_review.v1",
+    "tool.mcp.playwright.browser_navigate.v1",
+    "tool.mcp.playwright.browser_snapshot.v1",
+    "tool.mcp.playwright.browser_evaluate.v1",
+    "tool.mcp.playwright.browser_click.v1",
+    "tool.mcp.playwright.browser_type.v1",
+    "tool.mcp.playwright.browser_take_screenshot.v1"
+  ],
+  "mcp_server_ids": [
+    "mcp.market.playwright.v1"
+  ],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__test-automator.md",
+    "upstream_primary_repo": "agents-main",
+    "upstream_primary_path": "dev/agent预备/agents-main/agents-main/plugins/full-stack-orchestration/agents/test-automator.md",
+    "upstream_alternates": [
+      "dev/agent预备/agents-main/agents-main/plugins/backend-development/agents/test-automator.md",
+      "dev/agent预备/agents-main/agents-main/plugins/codebase-cleanup/agents/test-automator.md",
+      "dev/agent预备/agents-main/agents-main/plugins/incident-response/agents/test-automator.md",
+      "dev/agent预备/agents-main/agents-main/plugins/performance-testing-review/agents/test-automator.md",
+      "dev/agent预备/agents-main/agents-main/plugins/unit-testing/agents/test-automator.md",
+      "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/04-quality-security/test-automator.md",
+      "dev/agent预备/claude-code-sub-agents-main/claude-code-sub-agents-main/agents/quality-testing/test-automator.md"
+    ],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md",
+    "source_selection_reason": "agents-main 优先下选 `full-stack-orchestration` 版本以覆盖端到端自动化而非单点场景。",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "full_stack_orchestration",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 5
+  }
+}

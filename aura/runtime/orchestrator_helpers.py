@@ -100,11 +100,14 @@ def _summarize_tool_for_ui(tool_name: str, arguments: dict[str, Any]) -> str:
         return "Run shell command"
 
     if tool_name == "subagent__run":
+        agent_id = arguments.get("agent_id")
         preset = arguments.get("preset")
         task = arguments.get("task")
         task_snippet = _summarize_text(task, max_len=80) if isinstance(task, str) and task.strip() else None
 
-        if isinstance(preset, str) and preset.strip():
+        if isinstance(agent_id, str) and agent_id.strip():
+            head = f"Subagent: {agent_id.strip()}"
+        elif isinstance(preset, str) and preset.strip():
             head = f"Subagent: {preset.strip()}"
         else:
             head = "Subagent run"
@@ -186,6 +189,20 @@ def _summarize_tool_for_ui(tool_name: str, arguments: dict[str, Any]) -> str:
         return f"Skill {tool_name}"
 
     if tool_name.startswith("spec__"):
+        if tool_name == "spec__list_assets":
+            kind = arguments.get("kind")
+            query = arguments.get("query")
+            kind_s = kind.strip() if isinstance(kind, str) and kind.strip() else "all"
+            if isinstance(query, str) and query.strip():
+                return f"Spec list assets ({kind_s}, query={_q(query.strip())})"
+            return f"Spec list assets ({kind_s})"
+        if tool_name == "spec__get_asset":
+            kind = arguments.get("kind")
+            item_id = arguments.get("id")
+            kind_s = kind.strip() if isinstance(kind, str) and kind.strip() else "unknown"
+            if isinstance(item_id, str) and item_id.strip():
+                return f"Spec get asset ({kind_s}:{_q(item_id.strip())})"
+            return f"Spec get asset ({kind_s})"
         if tool_name == "spec__apply":
             proposal_id = arguments.get("proposal_id")
             if isinstance(proposal_id, str) and proposal_id:

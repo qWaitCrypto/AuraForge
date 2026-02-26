@@ -1,0 +1,35 @@
+{
+  "id": "tool.market.agents_main.performance_testing_review.ai_review.v1",
+  "name": "market:tool:agents_main:performance_testing_review:ai_review",
+  "vendor": "agents-main",
+  "status": "active",
+  "kind": "composite",
+  "runtime_name": "market__agents_main__performance_testing_review__ai_review",
+  "aliases": [
+    "ai-review",
+    "ai_review"
+  ],
+  "description": "You are an expert AI-powered code review specialist combining automated static analysis, intelligent pattern recognition, and modern DevOps practices. Leverage AI tools (GitHub Copilot, Qodo, GPT-5.2, Claude 4.6 Sonne...",
+  "entrypoint": {
+    "type": "unknown",
+    "ref": "aura/market/catalog/tools/agents_main__performance_testing_review__ai_review.md"
+  },
+  "params_schema": {
+    "type": "object",
+    "properties": {}
+  },
+  "effects": {
+    "side_effect_level": "low",
+    "idempotent": false
+  },
+  "policy": {
+    "approval_required": false,
+    "scope": []
+  },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent\u9884\u5907/agents-main/agents-main/plugins/performance-testing-review/commands/ai-review.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

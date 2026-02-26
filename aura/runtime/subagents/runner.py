@@ -356,6 +356,7 @@ def _run_output_exceeded_tool_call_limit(out: Any) -> bool:
 
 def run_subagent(
     *,
+    agent_id: str | None,
     preset: SubagentPreset,
     task: str,
     extra_context: Any,
@@ -396,6 +397,8 @@ def run_subagent(
         payload = dict(payload)
         payload.setdefault("subagent_run_id", subagent_run_id)
         payload.setdefault("preset", preset.name)
+        if isinstance(agent_id, str) and agent_id:
+            payload.setdefault("agent_id", agent_id)
 
         if kind is EventKind.TOOL_CALL_END:
             executed_tool_calls += 1
@@ -903,6 +906,7 @@ def run_subagent(
 
     transcript = {
         "subagent_run_id": subagent_run_id,
+        "agent_id": agent_id,
         "preset": preset.name,
         "status": status,
         "selected_role": selected_role.value,
@@ -927,6 +931,7 @@ def run_subagent(
     return {
         "ok": status == "completed",
         "subagent_run_id": subagent_run_id,
+        "agent_id": agent_id,
         "preset": preset.name,
         "status": status,
         "needs_approval": [needs_approval] if needs_approval is not None else [],

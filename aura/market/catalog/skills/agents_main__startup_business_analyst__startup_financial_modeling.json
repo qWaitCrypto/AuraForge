@@ -1,0 +1,18 @@
+{
+  "id": "skill.market.agents_main.startup_business_analyst.startup_financial_modeling.v1",
+  "name": "market:skill:agents_main:startup_business_analyst:startup_financial_modeling",
+  "vendor": "agents-main",
+  "status": "active",
+  "description": "This skill should be used when the user asks to \"create financial projections\", \"build a financial model\", \"forecast revenue\", \"calculate burn rate\", \"estimate runway\", \"model cash flow\", or requests 3-5 year financial planning for a startup.",
+  "source_path": "aura/market/catalog/skills/agents_main__startup_business_analyst__startup_financial_modeling.md",
+  "entry": {
+    "type": "markdown",
+    "ref": "aura/market/catalog/skills/agents_main__startup_business_analyst__startup_financial_modeling.md"
+  },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/startup-business-analyst/skills/startup-financial-modeling/SKILL.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "id": "skill.market.agents_main.llm_application_dev.rag_implementation.v1",
+  "name": "market:skill:agents_main:llm_application_dev:rag_implementation",
+  "vendor": "agents-main",
+  "status": "active",
+  "description": "Build Retrieval-Augmented Generation (RAG) systems for LLM applications with vector databases and semantic search. Use when implementing knowledge-grounded AI, building document Q&A systems, or integrating LLMs with external knowledge bases.",
+  "source_path": "aura/market/catalog/skills/agents_main__llm_application_dev__rag_implementation.md",
+  "entry": {
+    "type": "markdown",
+    "ref": "aura/market/catalog/skills/agents_main__llm_application_dev__rag_implementation.md"
+  },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/llm-application-dev/skills/rag-implementation/SKILL.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

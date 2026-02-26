@@ -1,0 +1,23 @@
+{
+  "id": "tool.market.agents_main.agent_teams.team_delegate.v1",
+  "name": "market:tool:agents_main:agent_teams:team_delegate",
+  "vendor": "agents-main",
+  "status": "active",
+  "kind": "composite",
+  "runtime_name": "market__agents_main__agent_teams__team_delegate",
+  "aliases": ["team-delegate"],
+  "description": "Task delegation dashboard for managing team workload, assignments, and rebalancing",
+  "entrypoint": {
+    "type": "unknown",
+    "ref": "aura/market/catalog/tools/agents_main__agent_teams__team_delegate.md"
+  },
+  "params_schema": { "type": "object", "properties": {} },
+  "effects": { "side_effect_level": "low", "idempotent": false },
+  "policy": { "approval_required": false, "scope": [] },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/agent-teams/commands/team-delegate.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

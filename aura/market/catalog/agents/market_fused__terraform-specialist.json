@@ -1,0 +1,44 @@
+{
+  "id": "agent.market.fused.terraform-specialist.v1",
+  "name": "terraform-specialist",
+  "vendor": "agents-main",
+  "status": "active",
+  "summary": "Expert Terraform/OpenTofu specialist mastering advanced IaC automation, state management, and enterprise infrastructure patterns. Handles complex module design, multi-cloud deployments, GitOps workflows, policy as code, and CI/CD integration. Covers migration strategies, security best practices, and modern IaC ecosystems. Use PROACTIVELY for advanced IaC, state management, or infrastructure automation.",
+  "role": "terraform-specialist",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.cloud_infrastructure.multi_cloud_architecture.v1",
+    "skill.market.agents_main.cloud_infrastructure.terraform_module_library.v1",
+    "skill.market.agents_main.cloud_infrastructure.cost_optimization.v1",
+    "skill.market.agents_main.cloud_infrastructure.hybrid_cloud_networking.v1",
+    "skill.market.agents_main.cloud_infrastructure.mtls_configuration.v1",
+    "skill.market.agents_main.cloud_infrastructure.service_mesh_observability.v1",
+    "skill.market.agents_main.cloud_infrastructure.istio_traffic_management.v1",
+    "skill.market.agents_main.cloud_infrastructure.linkerd_patterns.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.cicd_automation.workflow_automate.v1",
+    "tool.market.agents_main.deployment_validation.config_validate.v1",
+    "tool.market.agents_main.security_compliance.compliance_check.v1",
+    "tool.market.agents_main.database_cloud_optimization.cost_optimize.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__terraform-specialist.md",
+    "upstream_primary_repo": "agents-main",
+    "upstream_primary_path": "dev/agent预备/agents-main/agents-main/plugins/cloud-infrastructure/agents/terraform-specialist.md",
+    "upstream_alternates": [
+      "dev/agent预备/agents-main/agents-main/plugins/cicd-automation/agents/terraform-specialist.md",
+      "dev/agent预备/agents-main/agents-main/plugins/deployment-strategies/agents/terraform-specialist.md"
+    ],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md",
+    "source_selection_reason": "同源重复里 `cloud-infrastructure` 覆盖 IaC 通用场景，较部署策略或流水线更中性。",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "cloud_infrastructure",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 3
+  }
+}

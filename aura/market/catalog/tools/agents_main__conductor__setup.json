@@ -1,0 +1,23 @@
+{
+  "id": "tool.market.agents_main.conductor.setup.v1",
+  "name": "market:tool:agents_main:conductor:setup",
+  "vendor": "agents-main",
+  "status": "active",
+  "kind": "composite",
+  "runtime_name": "market__agents_main__conductor__setup",
+  "aliases": ["setup"],
+  "description": "Initialize project with Conductor artifacts (product definition, tech stack, workflow, style guides)",
+  "entrypoint": {
+    "type": "unknown",
+    "ref": "aura/market/catalog/tools/agents_main__conductor__setup.md"
+  },
+  "params_schema": { "type": "object", "properties": {} },
+  "effects": { "side_effect_level": "low", "idempotent": false },
+  "policy": { "approval_required": false, "scope": [] },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/conductor/commands/setup.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "id": "tool.market.agents_main.performance_testing_review.multi_agent_review.v1",
+  "name": "market:tool:agents_main:performance_testing_review:multi_agent_review",
+  "vendor": "agents-main",
+  "status": "active",
+  "kind": "composite",
+  "runtime_name": "market__agents_main__performance_testing_review__multi_agent_review",
+  "aliases": [
+    "multi-agent-review",
+    "multi_agent_review"
+  ],
+  "description": "A sophisticated AI-powered code review system designed to provide comprehensive, multi-perspective analysis of software artifacts through intelligent agent coordination and specialized domain expertise.",
+  "entrypoint": {
+    "type": "unknown",
+    "ref": "aura/market/catalog/tools/agents_main__performance_testing_review__multi_agent_review.md"
+  },
+  "params_schema": {
+    "type": "object",
+    "properties": {}
+  },
+  "effects": {
+    "side_effect_level": "low",
+    "idempotent": false
+  },
+  "policy": {
+    "approval_required": false,
+    "scope": []
+  },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent\u9884\u5907/agents-main/agents-main/plugins/performance-testing-review/commands/multi-agent-review.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

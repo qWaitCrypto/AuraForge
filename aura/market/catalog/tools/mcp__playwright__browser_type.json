@@ -1,0 +1,18 @@
+{
+  "id": "tool.mcp.playwright.browser_type.v1",
+  "name": "mcp:playwright:browser_type",
+  "vendor": "mcp",
+  "status": "draft",
+  "kind": "mcp_proxy",
+  "runtime_name": "mcp__playwright__browser_type",
+  "aliases": ["mcp__playwright__browser_type", "playwright:browser_type", "browser_type"],
+  "description": "Type text into an input element (Playwright MCP).",
+  "entrypoint": { "type": "mcp", "ref": "playwright:browser_type" },
+  "params_schema": { "type": "object", "properties": {} },
+  "effects": { "side_effect_level": "high", "idempotent": false },
+  "runtime": { "timeout_sec": 60, "retry": { "max_attempts": 1 } },
+  "policy": { "approval_required": true, "approval_level": "high", "scope": [] },
+  "mcp_binding": { "server_id": "mcp.market.playwright.v1", "remote_tool": "browser_type" },
+  "metadata": { "notes": "Market template; runtime MCP discovery may overwrite schemas and binding server_id." }
+}
+

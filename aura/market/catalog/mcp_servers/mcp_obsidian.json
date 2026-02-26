@@ -1,0 +1,16 @@
+{
+  "id": "mcp.market.mcp_obsidian.v1",
+  "name": "mcp-obsidian",
+  "vendor": "mcp-obsidian",
+  "status": "active",
+  "enabled": false,
+  "transport": "unknown",
+  "auth": { "type": "none", "scopes": [] },
+  "healthcheck": { "interval_sec": 60, "timeout_sec": 3 },
+  "timeout_sec": 60,
+  "provides_tools": [],
+  "metadata": {
+    "notes": "Referenced by market tools (e.g., standup notes). Configure a real MCP server in .aura/config/mcp.json to enable."
+  }
+}
+

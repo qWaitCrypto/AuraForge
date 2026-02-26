@@ -1,0 +1,44 @@
+{
+  "id": "agent.market.fused.csharp-developer.v1",
+  "name": "csharp-developer",
+  "vendor": "awesome-claude-code-subagents",
+  "status": "active",
+  "summary": "Use this agent when building ASP.NET Core web APIs, cloud-native .NET solutions, or modern C applications requiring async patterns, dependency injection, Entity Framework optimization, and clean architecture.",
+  "role": "csharp-developer",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.dotnet_contribution.dotnet_backend_patterns.v1",
+    "skill.market.agents_main.backend_development.api_design_principles.v1",
+    "skill.market.agents_main.backend_development.architecture_patterns.v1",
+    "skill.market.agents_main.backend_development.microservices_patterns.v1",
+    "skill.market.agents_main.developer_essentials.auth_implementation_patterns.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.backend_development.feature_development.v1",
+    "tool.market.agents_main.unit_testing.test_generate.v1",
+    "tool.market.agents_main.dependency_management.deps_audit.v1",
+    "tool.mcp.playwright.browser_navigate.v1",
+    "tool.mcp.playwright.browser_snapshot.v1",
+    "tool.mcp.playwright.browser_evaluate.v1",
+    "tool.mcp.playwright.browser_click.v1",
+    "tool.mcp.playwright.browser_type.v1",
+    "tool.mcp.playwright.browser_take_screenshot.v1"
+  ],
+  "mcp_server_ids": [
+    "mcp.market.playwright.v1"
+  ],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__csharp-developer.md",
+    "upstream_primary_repo": "awesome-claude-code-subagents",
+    "upstream_primary_path": "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/02-language-specialists/csharp-developer.md",
+    "upstream_alternates": [],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/awesome-claude-code-subagents.MIT.md",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "dotnet_contribution",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 5
+  }
+}

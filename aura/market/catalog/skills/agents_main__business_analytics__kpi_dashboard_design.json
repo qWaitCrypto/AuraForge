@@ -1,0 +1,19 @@
+{
+  "id": "skill.market.agents_main.business_analytics.kpi_dashboard_design.v1",
+  "name": "market:skill:agents_main:business_analytics:kpi_dashboard_design",
+  "vendor": "agents-main",
+  "status": "active",
+  "description": "Design effective KPI dashboards with metrics selection, visualization best practices, and real-time monitoring patterns. Use when building business dashboards, selecting metrics, or designing data visualization layouts.",
+  "source_path": "aura/market/catalog/skills/agents_main__business_analytics__kpi_dashboard_design.md",
+  "entry": {
+    "type": "markdown",
+    "ref": "aura/market/catalog/skills/agents_main__business_analytics__kpi_dashboard_design.md"
+  },
+  "requires_tool_ids": [],
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/business-analytics/skills/kpi-dashboard-design/SKILL.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "id": "agent.market.fused.fastapi-expert.v1",
+  "name": "fastapi-expert",
+  "vendor": "claude-code-subagents",
+  "status": "active",
+  "summary": "FastAPI development with an emphasis on best practices, optimization, and robust design patterns.",
+  "role": "fastapi-expert",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.api_scaffolding.fastapi_templates.v1",
+    "skill.market.agents_main.backend_development.api_design_principles.v1",
+    "skill.market.agents_main.python_development.async_python_patterns.v1",
+    "skill.market.agents_main.python_development.python_design_patterns.v1",
+    "skill.market.agents_main.python_development.python_testing_patterns.v1",
+    "skill.market.agents_main.python_development.python_observability.v1",
+    "skill.market.agents_main.python_development.python_performance_optimization.v1",
+    "skill.market.agents_main.python_development.python_type_safety.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.python_development.python_scaffold.v1",
+    "tool.market.agents_main.api_testing_observability.api_mock.v1",
+    "tool.market.agents_main.unit_testing.test_generate.v1",
+    "tool.market.agents_main.deployment_validation.config_validate.v1",
+    "tool.market.agents_main.distributed_debugging.debug_trace.v1",
+    "tool.market.agents_main.observability_monitoring.monitor_setup.v1",
+    "tool.market.agents_main.observability_monitoring.slo_implement.v1",
+    "tool.market.agents_main.application_performance.performance_optimization.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__fastapi-expert.md",
+    "upstream_primary_repo": "claude-code-subagents",
+    "upstream_primary_path": "dev/agent预备/claude-code-subagents-main/claude-code-subagents-main/agents/fastapi-expert.md",
+    "upstream_alternates": [],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/claude-code-subagents.MIT.md",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "python_development",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 4
+  }
+}

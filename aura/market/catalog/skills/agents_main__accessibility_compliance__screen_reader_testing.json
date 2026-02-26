@@ -1,0 +1,19 @@
+{
+  "id": "skill.market.agents_main.accessibility_compliance.screen_reader_testing.v1",
+  "name": "market:skill:agents_main:accessibility_compliance:screen_reader_testing",
+  "vendor": "agents-main",
+  "status": "active",
+  "description": "Test web applications with screen readers including VoiceOver, NVDA, and JAWS. Use when validating screen reader compatibility, debugging accessibility issues, or ensuring assistive technology support.",
+  "source_path": "aura/market/catalog/skills/agents_main__accessibility_compliance__screen_reader_testing.md",
+  "entry": {
+    "type": "markdown",
+    "ref": "aura/market/catalog/skills/agents_main__accessibility_compliance__screen_reader_testing.md"
+  },
+  "requires_tool_ids": [],
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/accessibility-compliance/skills/screen-reader-testing/SKILL.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

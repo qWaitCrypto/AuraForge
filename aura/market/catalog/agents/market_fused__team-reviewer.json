@@ -1,0 +1,43 @@
+{
+  "id": "agent.market.fused.team-reviewer.v1",
+  "name": "team-reviewer",
+  "vendor": "agents-main",
+  "status": "active",
+  "summary": "Multi-dimensional code reviewer that operates on one assigned review dimension (security, performance, architecture, testing, or accessibility) with structured finding format. Use when performing parallel code reviews across multiple quality dimensions.",
+  "role": "team-reviewer",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.developer_essentials.code_review_excellence.v1",
+    "skill.market.agents_main.developer_essentials.debugging_strategies.v1",
+    "skill.market.agents_main.developer_essentials.e2e_testing_patterns.v1",
+    "skill.market.agents_main.accessibility_compliance.wcag_audit_patterns.v1",
+    "skill.market.agents_main.accessibility_compliance.screen_reader_testing.v1",
+    "skill.market.agents_main.agent_teams.multi_reviewer_patterns.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.comprehensive_review.full_review.v1",
+    "tool.market.agents_main.performance_testing_review.ai_review.v1",
+    "tool.market.agents_main.performance_testing_review.multi_agent_review.v1",
+    "tool.market.agents_main.agent_teams.team_review.v1",
+    "tool.market.agents_main.accessibility_compliance.accessibility_audit.v1",
+    "tool.market.agents_main.code_documentation.code_explain.v1",
+    "tool.market.awesome_claude_code_subagents.subagent_catalog.fetch.v1",
+    "tool.market.awesome_claude_code_subagents.subagent_catalog.list.v1",
+    "tool.market.awesome_claude_code_subagents.subagent_catalog.search.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__team-reviewer.md",
+    "upstream_primary_repo": "agents-main",
+    "upstream_primary_path": "dev/agent预备/agents-main/agents-main/plugins/agent-teams/agents/team-reviewer.md",
+    "upstream_alternates": [],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "agent_teams",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 5
+  }
+}

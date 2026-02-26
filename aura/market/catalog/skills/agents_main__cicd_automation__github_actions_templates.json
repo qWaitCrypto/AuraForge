@@ -1,0 +1,19 @@
+{
+  "id": "skill.market.agents_main.cicd_automation.github_actions_templates.v1",
+  "name": "market:skill:agents_main:cicd_automation:github_actions_templates",
+  "vendor": "agents-main",
+  "status": "active",
+  "description": "Create production-ready GitHub Actions workflows for automated testing, building, and deploying applications. Use when setting up CI/CD with GitHub Actions, automating development workflows, or creating reusable workflow templates.",
+  "source_path": "aura/market/catalog/skills/agents_main__cicd_automation__github_actions_templates.md",
+  "entry": {
+    "type": "markdown",
+    "ref": "aura/market/catalog/skills/agents_main__cicd_automation__github_actions_templates.md"
+  },
+  "requires_tool_ids": [],
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/cicd-automation/skills/github-actions-templates/SKILL.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

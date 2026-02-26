@@ -1,0 +1,35 @@
+{
+  "id": "tool.market.agents_main.agent_orchestration.improve_agent.v1",
+  "name": "market:tool:agents_main:agent_orchestration:improve_agent",
+  "vendor": "agents-main",
+  "status": "active",
+  "kind": "composite",
+  "runtime_name": "market__agents_main__agent_orchestration__improve_agent",
+  "aliases": [
+    "improve-agent",
+    "improve_agent"
+  ],
+  "description": "Systematic improvement of existing agents through performance analysis, prompt engineering, and continuous iteration.",
+  "entrypoint": {
+    "type": "unknown",
+    "ref": "aura/market/catalog/tools/agents_main__agent_orchestration__improve_agent.md"
+  },
+  "params_schema": {
+    "type": "object",
+    "properties": {}
+  },
+  "effects": {
+    "side_effect_level": "low",
+    "idempotent": false
+  },
+  "policy": {
+    "approval_required": false,
+    "scope": []
+  },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/agent-orchestration/commands/improve-agent.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

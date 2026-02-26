@@ -1,0 +1,18 @@
+{
+  "id": "skill.market.agents_main.llm_application_dev.embedding_strategies.v1",
+  "name": "market:skill:agents_main:llm_application_dev:embedding_strategies",
+  "vendor": "agents-main",
+  "status": "active",
+  "description": "Select and optimize embedding models for semantic search and RAG applications. Use when choosing embedding models, implementing chunking strategies, or optimizing embedding quality for specific domains.",
+  "source_path": "aura/market/catalog/skills/agents_main__llm_application_dev__embedding_strategies.md",
+  "entry": {
+    "type": "markdown",
+    "ref": "aura/market/catalog/skills/agents_main__llm_application_dev__embedding_strategies.md"
+  },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/llm-application-dev/skills/embedding-strategies/SKILL.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

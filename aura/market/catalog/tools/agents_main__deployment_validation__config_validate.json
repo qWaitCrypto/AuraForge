@@ -1,0 +1,36 @@
+{
+  "id": "tool.market.agents_main.deployment_validation.config_validate.v1",
+  "name": "market:tool:agents_main:deployment_validation:config_validate",
+  "vendor": "agents-main",
+  "status": "draft",
+  "kind": "composite",
+  "runtime_name": "market__agents_main__deployment_validation__config_validate",
+  "aliases": [
+    "config-validate",
+    "config_validate"
+  ],
+  "description": "You are a configuration management expert specializing in validating, testing, and ensuring the correctness of application configurations. Create comprehensive validation schemas, implement configuration testing strategies, and ensure configurations are secure, consistent, and error-free across all environments.",
+  "entrypoint": {
+    "type": "unknown",
+    "ref": "aura/market/catalog/tools/agents_main__deployment_validation__config_validate.md"
+  },
+  "params_schema": {
+    "type": "object",
+    "properties": {}
+  },
+  "effects": {
+    "side_effect_level": "high",
+    "idempotent": false
+  },
+  "policy": {
+    "approval_required": true,
+    "scope": []
+  },
+  "metadata": {
+    "risk_level": "high",
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/deployment-validation/commands/config-validate.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

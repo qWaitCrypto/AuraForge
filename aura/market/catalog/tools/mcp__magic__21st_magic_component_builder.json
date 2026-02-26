@@ -1,0 +1,22 @@
+{
+  "id": "tool.mcp.magic.21st_magic_component_builder.v1",
+  "name": "mcp:magic:21st_magic_component_builder",
+  "vendor": "mcp",
+  "status": "draft",
+  "kind": "mcp_proxy",
+  "runtime_name": "mcp__magic__21st_magic_component_builder",
+  "aliases": [
+    "mcp__magic__21st_magic_component_builder",
+    "magic:21st_magic_component_builder",
+    "21st_magic_component_builder"
+  ],
+  "description": "Generate UI components from a prompt (Magic MCP).",
+  "entrypoint": { "type": "mcp", "ref": "magic:21st_magic_component_builder" },
+  "params_schema": { "type": "object", "properties": {} },
+  "effects": { "side_effect_level": "high", "idempotent": false },
+  "runtime": { "timeout_sec": 60, "retry": { "max_attempts": 1 } },
+  "policy": { "approval_required": true, "approval_level": "high", "scope": [] },
+  "mcp_binding": { "server_id": "mcp.market.magic.v1", "remote_tool": "21st_magic_component_builder" },
+  "metadata": { "notes": "Market template; runtime MCP discovery may overwrite schemas and binding server_id." }
+}
+

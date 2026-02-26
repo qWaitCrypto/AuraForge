@@ -1,0 +1,23 @@
+{
+  "id": "tool.market.agents_main.codebase_cleanup.tech_debt.v1",
+  "name": "market:tool:agents_main:codebase_cleanup:tech_debt",
+  "vendor": "agents-main",
+  "status": "active",
+  "kind": "composite",
+  "runtime_name": "market__agents_main__codebase_cleanup__tech_debt",
+  "aliases": ["tech-debt"],
+  "description": "Analyze technical debt hotspots, quantify impact, and produce a prioritized remediation plan",
+  "entrypoint": {
+    "type": "unknown",
+    "ref": "aura/market/catalog/tools/agents_main__codebase_cleanup__tech_debt.md"
+  },
+  "params_schema": { "type": "object", "properties": {} },
+  "effects": { "side_effect_level": "low", "idempotent": false },
+  "policy": { "approval_required": false, "scope": [] },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/codebase-cleanup/commands/tech-debt.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

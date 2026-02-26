@@ -98,16 +98,20 @@ class DAGExecuteNextTool:
         plan_by_id: dict[str, PlanItem] = {it.id: it for it in plan_state.plan}
 
         presets_by_id: dict[str, str] = {}
+        agents_by_id: dict[str, str] = {}
         work_specs_by_id: dict[str, dict[str, Any]] = {}
         invalid_nodes: list[dict[str, Any]] = []
         for node in nodes:
             meta = node.metadata if isinstance(getattr(node, "metadata", None), dict) else {}
+            agent_id = meta.get("agent_id")
             preset = meta.get("preset")
             ws = meta.get("work_spec")
 
             node_errors: list[str] = []
-            if not isinstance(preset, str) or not preset.strip():
-                node_errors.append("missing metadata.preset")
+            has_agent = isinstance(agent_id, str) and bool(agent_id.strip())
+            has_preset = isinstance(preset, str) and bool(preset.strip())
+            if not has_agent and not has_preset:
+                node_errors.append("missing metadata.agent_id or metadata.preset")
             if not isinstance(ws, dict):
                 node_errors.append("missing metadata.work_spec")
             else:
@@ -121,7 +125,10 @@ class DAGExecuteNextTool:
                 invalid_nodes.append({"node_id": node.id, "errors": node_errors})
                 continue
 
-            presets_by_id[node.id] = preset.strip()
+            if has_preset:
+                presets_by_id[node.id] = str(preset).strip()
+            if has_agent:
+                agents_by_id[node.id] = str(agent_id).strip()
             # Inject dependency outputs into downstream inputs (strict DAG I/O passing).
             work_specs_by_id[node.id] = self._merge_work_spec_inputs_from_deps(
                 base_work_spec=ws,
@@ -141,13 +148,16 @@ class DAGExecuteNextTool:
                 "error_code": "missing_node_contract",
                 "message": (
                     "DAG nodes are missing required execution metadata. "
-                    "Update the plan via `update_plan` and include `metadata.preset` + `metadata.work_spec` for each node."
+                    "Update the plan via `update_plan` and include `metadata.agent_id` (preferred) or `metadata.preset`, plus `metadata.work_spec`."
                 ),
                 "invalid_nodes": invalid_nodes,
             }
 
-        def _preset_for_node(node) -> str:
-            return presets_by_id[node.id]
+        def _preset_for_node(node) -> str | None:
+            return presets_by_id.get(node.id)
+
+        def _agent_for_node(node) -> str | None:
+            return agents_by_id.get(node.id)
 
         def _work_spec_for_node(node) -> dict[str, Any]:
             return work_specs_by_id[node.id]
@@ -156,6 +166,7 @@ class DAGExecuteNextTool:
             nodes=nodes,
             subagent_tool=self.subagent_tool,
             preset_selector=_preset_for_node,
+            agent_selector=_agent_for_node,
             work_spec_selector=_work_spec_for_node,
             project_root=project_root,
             context=context,
@@ -174,9 +185,11 @@ class DAGExecuteNextTool:
         for action in actions:
             node_id = action.node_id
             preset_name = presets_by_id.get(node_id)
+            agent_id = agents_by_id.get(node_id)
             raw_result = dispatch_by_id.get(node_id).result if node_id in dispatch_by_id else None
             node_result = self._build_node_result_record(
                 node_id=node_id,
+                agent_id=agent_id,
                 preset=preset_name,
                 work_spec=work_specs_by_id.get(node_id),
                 dispatch_result=raw_result,
@@ -245,6 +258,7 @@ class DAGExecuteNextTool:
         self,
         *,
         node_id: str,
+        agent_id: str | None,
         preset: str | None,
         work_spec: dict[str, Any] | None,
         dispatch_result: dict[str, Any] | None,
@@ -267,6 +281,7 @@ class DAGExecuteNextTool:
 
         return {
             "node_id": node_id,
+            "agent_id": agent_id,
             "preset": preset,
             "status": getattr(action, "action", None),
             "report": report if report else None,

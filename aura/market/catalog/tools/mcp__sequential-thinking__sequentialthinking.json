@@ -1,0 +1,22 @@
+{
+  "id": "tool.mcp.sequential_thinking.sequentialthinking.v1",
+  "name": "mcp:sequential-thinking:sequentialthinking",
+  "vendor": "mcp",
+  "status": "draft",
+  "kind": "mcp_proxy",
+  "runtime_name": "mcp__sequential-thinking__sequentialthinking",
+  "aliases": [
+    "mcp__sequential-thinking__sequentialthinking",
+    "sequential-thinking:sequentialthinking",
+    "sequentialthinking"
+  ],
+  "description": "Structured step-by-step reasoning helper (Sequential Thinking MCP).",
+  "entrypoint": { "type": "mcp", "ref": "sequential-thinking:sequentialthinking" },
+  "params_schema": { "type": "object", "properties": {} },
+  "effects": { "side_effect_level": "high", "idempotent": false },
+  "runtime": { "timeout_sec": 60, "retry": { "max_attempts": 1 } },
+  "policy": { "approval_required": true, "approval_level": "high", "scope": [] },
+  "mcp_binding": { "server_id": "mcp.market.sequential_thinking.v1", "remote_tool": "sequentialthinking" },
+  "metadata": { "notes": "Market template; runtime MCP discovery may overwrite schemas and binding server_id." }
+}
+

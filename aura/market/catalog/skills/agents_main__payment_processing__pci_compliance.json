@@ -1,0 +1,17 @@
+{
+  "id": "skill.market.agents_main.payment_processing.pci_compliance.v1",
+  "name": "market:skill:agents_main:payment_processing:pci_compliance",
+  "vendor": "agents-main",
+  "status": "active",
+  "entry": {
+    "type": "markdown",
+    "ref": "aura/market/catalog/skills/agents_main__payment_processing__pci_compliance.md"
+  },
+  "requires_tool_ids": [],
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/payment-processing/skills/pci-compliance/SKILL.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "id": "skill.market.agents_main.blockchain_web3.web3_testing.v1",
+  "name": "market:skill:agents_main:blockchain_web3:web3_testing",
+  "vendor": "agents-main",
+  "status": "active",
+  "description": "Test smart contracts comprehensively using Hardhat and Foundry with unit tests, integration tests, and mainnet forking. Use when testing Solidity contracts, setting up blockchain test suites, or validating DeFi protocols.",
+  "source_path": "aura/market/catalog/skills/agents_main__blockchain_web3__web3_testing.md",
+  "entry": {
+    "type": "markdown",
+    "ref": "aura/market/catalog/skills/agents_main__blockchain_web3__web3_testing.md"
+  },
+  "requires_tool_ids": [],
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/blockchain-web3/skills/web3-testing/SKILL.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

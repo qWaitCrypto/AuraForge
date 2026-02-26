@@ -1,0 +1,42 @@
+{
+  "id": "agent.market.fused.data-engineer.v1",
+  "name": "data-engineer",
+  "vendor": "agents-main",
+  "status": "active",
+  "summary": "Build scalable data pipelines, modern data warehouses, and real-time streaming architectures. Implements Apache Spark, dbt, Airflow, and cloud-native data platforms. Use PROACTIVELY for data pipeline design, analytics...",
+  "role": "data-engineer",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.data_engineering.airflow_dag_patterns.v1",
+    "skill.market.agents_main.data_engineering.dbt_transformation_patterns.v1",
+    "skill.market.agents_main.data_engineering.spark_optimization.v1",
+    "skill.market.agents_main.data_engineering.data_quality_frameworks.v1",
+    "skill.market.agents_main.developer_essentials.sql_optimization_patterns.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.data_engineering.data_pipeline.v1",
+    "tool.market.agents_main.data_engineering.data_driven_feature.v1",
+    "tool.market.agents_main.database_migrations.sql_migrations.v1",
+    "tool.market.agents_main.database_migrations.migration_observability.v1",
+    "tool.market.agents_main.observability_monitoring.monitor_setup.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__data-engineer.md",
+    "upstream_primary_repo": "agents-main",
+    "upstream_primary_path": "dev/agent预备/agents-main/agents-main/plugins/data-engineering/agents/data-engineer.md",
+    "upstream_alternates": [
+      "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/05-data-ai/data-engineer.md",
+      "dev/agent预备/claude-code-sub-agents-main/claude-code-sub-agents-main/agents/data-ai/data-engineer.md"
+    ],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md",
+    "source_selection_reason": "agents-main 优先并覆盖批流一体与数据平台建设等通用能力。",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "data_engineering",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 2
+  }
+}

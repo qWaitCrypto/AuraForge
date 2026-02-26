@@ -1,0 +1,22 @@
+{
+  "id": "skill.market.agents_main.observability_monitoring.grafana_dashboards.v1",
+  "name": "market:skill:agents_main:observability_monitoring:grafana_dashboards",
+  "vendor": "agents-main",
+  "status": "active",
+  "description": "Create and manage production Grafana dashboards for real-time visualization of system and application metrics. Use when building monitoring dashboards, visualizing metrics, or creating operational observability interfaces.",
+  "source_path": "aura/market/catalog/skills/agents_main__observability_monitoring__grafana_dashboards.md",
+  "entry": {
+    "type": "markdown",
+    "ref": "aura/market/catalog/skills/agents_main__observability_monitoring__grafana_dashboards.md"
+  },
+  "output_contract": {
+    "format": "markdown",
+    "sections": []
+  },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent\u9884\u5907/agents-main/agents-main/plugins/observability-monitoring/skills/grafana-dashboards/SKILL.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

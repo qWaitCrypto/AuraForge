@@ -1,0 +1,51 @@
+{
+  "id": "agent.market.fused.deployment-engineer.v1",
+  "name": "deployment-engineer",
+  "vendor": "agents-main",
+  "status": "active",
+  "summary": "Expert deployment engineer specializing in modern CI/CD pipelines, GitOps workflows, and advanced deployment automation. Masters GitHub Actions, ArgoCD/Flux, progressive delivery, container security, and platform engi...",
+  "role": "deployment-engineer",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.cicd_automation.deployment_pipeline_design.v1",
+    "skill.market.agents_main.cicd_automation.github_actions_templates.v1",
+    "skill.market.agents_main.cicd_automation.gitlab_ci_patterns.v1",
+    "skill.market.agents_main.cicd_automation.secrets_management.v1",
+    "skill.market.agents_main.kubernetes_operations.gitops_workflow.v1",
+    "skill.market.agents_main.kubernetes_operations.k8s_security_policies.v1",
+    "skill.market.agents_main.observability_monitoring.slo_implementation.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.cicd_automation.workflow_automate.v1",
+    "tool.market.agents_main.deployment_validation.config_validate.v1",
+    "tool.market.agents_main.incident_response.incident_response.v1",
+    "tool.market.agents_main.incident_response.smart_fix.v1",
+    "tool.market.agents_main.observability_monitoring.monitor_setup.v1",
+    "tool.market.agents_main.observability_monitoring.slo_implement.v1",
+    "tool.market.agents_main.security_scanning.security_hardening.v1",
+    "tool.market.agents_main.security_scanning.security_dependencies.v1",
+    "tool.market.agents_main.git_pr_workflows.git_workflow.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__deployment-engineer.md",
+    "upstream_primary_repo": "agents-main",
+    "upstream_primary_path": "dev/agent预备/agents-main/agents-main/plugins/deployment-strategies/agents/deployment-engineer.md",
+    "upstream_alternates": [
+      "dev/agent预备/agents-main/agents-main/plugins/cicd-automation/agents/deployment-engineer.md",
+      "dev/agent预备/agents-main/agents-main/plugins/cloud-infrastructure/agents/deployment-engineer.md",
+      "dev/agent预备/agents-main/agents-main/plugins/full-stack-orchestration/agents/deployment-engineer.md",
+      "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/03-infrastructure/deployment-engineer.md",
+      "dev/agent预备/claude-code-sub-agents-main/claude-code-sub-agents-main/agents/infrastructure/deployment-engineer.md"
+    ],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md",
+    "source_selection_reason": "排除空文件后，`deployment-strategies` 最贴合部署工程师的通用职责并便于复用。",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "deployment_strategies",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 2
+  }
+}

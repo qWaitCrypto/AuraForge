@@ -1,0 +1,35 @@
+{
+  "id": "tool.market.agents_main.accessibility_compliance.accessibility_audit.v1",
+  "name": "market:tool:agents_main:accessibility_compliance:accessibility_audit",
+  "vendor": "agents-main",
+  "status": "active",
+  "kind": "composite",
+  "runtime_name": "market__agents_main__accessibility_compliance__accessibility_audit",
+  "aliases": [
+    "accessibility-audit",
+    "accessibility_audit"
+  ],
+  "description": "You are an accessibility expert specializing in WCAG compliance, inclusive design, and assistive technology compatibility. Conduct comprehensive audits, identify barriers, provide remediation guidance, and ensure digital products are accessible to all users.",
+  "entrypoint": {
+    "type": "unknown",
+    "ref": "aura/market/catalog/tools/agents_main__accessibility_compliance__accessibility_audit.md"
+  },
+  "params_schema": {
+    "type": "object",
+    "properties": {}
+  },
+  "effects": {
+    "side_effect_level": "low",
+    "idempotent": false
+  },
+  "policy": {
+    "approval_required": false,
+    "scope": []
+  },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/accessibility-compliance/commands/accessibility-audit.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

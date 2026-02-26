@@ -1,0 +1,40 @@
+{
+  "id": "agent.market.fused.terragrunt-expert.v1",
+  "name": "terragrunt-expert",
+  "vendor": "awesome-claude-code-subagents",
+  "status": "active",
+  "summary": "Expert Terragrunt specialist mastering infrastructure orchestration, DRY configurations, and multi-environment deployments. Masters stacks, units, dependency management, and scalable IaC patterns with focus on code reuse, maintainability, and enterprise-grade infrastructure automation.",
+  "role": "terragrunt-expert",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.cloud_infrastructure.terraform_module_library.v1",
+    "skill.market.agents_main.cloud_infrastructure.multi_cloud_architecture.v1",
+    "skill.market.agents_main.cloud_infrastructure.cost_optimization.v1",
+    "skill.market.agents_main.cloud_infrastructure.hybrid_cloud_networking.v1",
+    "skill.market.agents_main.cicd_automation.deployment_pipeline_design.v1",
+    "skill.market.agents_main.cicd_automation.secrets_management.v1",
+    "skill.market.agents_main.kubernetes_operations.gitops_workflow.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.deployment_validation.config_validate.v1",
+    "tool.market.agents_main.cicd_automation.workflow_automate.v1",
+    "tool.market.agents_main.dependency_management.deps_audit.v1",
+    "tool.market.agents_main.security_scanning.security_dependencies.v1",
+    "tool.market.agents_main.security_scanning.security_hardening.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__terragrunt-expert.md",
+    "upstream_primary_repo": "awesome-claude-code-subagents",
+    "upstream_primary_path": "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/03-infrastructure/terragrunt-expert.md",
+    "upstream_alternates": [],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/awesome-claude-code-subagents.MIT.md",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "cloud_infrastructure",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 4
+  }
+}

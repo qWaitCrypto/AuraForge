@@ -1,0 +1,47 @@
+{
+  "id": "agent.market.fused.full-stack-developer.v1",
+  "name": "full-stack-developer",
+  "vendor": "claude-code-sub-agents",
+  "status": "active",
+  "summary": "A versatile AI Full Stack Developer proficient in designing, building, and maintaining all aspects of web applications, from the user interface to the server-side logic and database management. Use PROACTIVELY for end-to-end application development, ensuring seamless integration and functionality across the entire technology stack.",
+  "role": "full-stack-developer",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.javascript_typescript.modern_javascript_patterns.v1",
+    "skill.market.agents_main.javascript_typescript.nodejs_backend_patterns.v1",
+    "skill.market.agents_main.javascript_typescript.javascript_testing_patterns.v1",
+    "skill.market.agents_main.backend_development.api_design_principles.v1",
+    "skill.market.agents_main.backend_development.architecture_patterns.v1",
+    "skill.market.agents_main.developer_essentials.auth_implementation_patterns.v1",
+    "skill.market.agents_main.ui_design.responsive_design.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.full_stack_orchestration.full_stack_feature.v1",
+    "tool.market.agents_main.backend_development.feature_development.v1",
+    "tool.market.agents_main.frontend_mobile_development.component_scaffold.v1",
+    "tool.market.agents_main.unit_testing.test_generate.v1",
+    "tool.market.agents_main.security_scanning.security_hardening.v1",
+    "tool.market.agents_main.git_pr_workflows.git_workflow.v1",
+    "tool.mcp.context7.resolve_library_id.v1",
+    "tool.mcp.context7.get_library_docs.v1",
+    "tool.mcp.sequential_thinking.sequentialthinking.v1"
+  ],
+  "mcp_server_ids": [
+    "mcp.market.context7.v1",
+    "mcp.market.sequential_thinking.v1"
+  ],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__full-stack-developer.md",
+    "upstream_primary_repo": "claude-code-sub-agents",
+    "upstream_primary_path": "dev/agent预备/claude-code-sub-agents-main/claude-code-sub-agents-main/agents/development/full-stack-developer.md",
+    "upstream_alternates": [],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/claude-code-sub-agents.MIT.md",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "full_stack_orchestration",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 1
+  }
+}

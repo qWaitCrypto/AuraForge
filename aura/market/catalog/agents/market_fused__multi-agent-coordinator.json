@@ -1,0 +1,46 @@
+{
+  "id": "agent.market.fused.multi-agent-coordinator.v1",
+  "name": "multi-agent-coordinator",
+  "vendor": "awesome-claude-code-subagents",
+  "status": "active",
+  "summary": "Use when coordinating multiple concurrent agents that need to communicate, share state, synchronize work, and handle distributed failures across a system.",
+  "role": "multi-agent-coordinator",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.agent_teams.team_composition_patterns.v1",
+    "skill.market.agents_main.agent_teams.task_coordination_strategies.v1",
+    "skill.market.agents_main.agent_teams.team_communication_protocols.v1",
+    "skill.market.agents_main.agent_teams.parallel_feature_development.v1",
+    "skill.market.agents_main.agent_teams.parallel_debugging.v1",
+    "skill.market.agents_main.agent_teams.multi_reviewer_patterns.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.agent_teams.team_spawn.v1",
+    "tool.market.agents_main.agent_teams.team_delegate.v1",
+    "tool.market.agents_main.agent_teams.team_status.v1",
+    "tool.market.agents_main.agent_teams.team_feature.v1",
+    "tool.market.agents_main.agent_teams.team_debug.v1",
+    "tool.market.agents_main.agent_teams.team_review.v1",
+    "tool.market.agents_main.agent_teams.team_shutdown.v1",
+    "tool.market.agents_main.context_management.context_save.v1",
+    "tool.market.agents_main.context_management.context_restore.v1",
+    "tool.market.awesome_claude_code_subagents.subagent_catalog.list.v1",
+    "tool.market.awesome_claude_code_subagents.subagent_catalog.search.v1",
+    "tool.market.awesome_claude_code_subagents.subagent_catalog.fetch.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__multi-agent-coordinator.md",
+    "upstream_primary_repo": "awesome-claude-code-subagents",
+    "upstream_primary_path": "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/09-meta-orchestration/multi-agent-coordinator.md",
+    "upstream_alternates": [],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/awesome-claude-code-subagents.MIT.md",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "agent_teams",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 1
+  }
+}

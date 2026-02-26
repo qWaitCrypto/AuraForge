@@ -1,0 +1,17 @@
+{
+  "id": "skill.market.agents_main.payment_processing.stripe_integration.v1",
+  "name": "market:skill:agents_main:payment_processing:stripe_integration",
+  "vendor": "agents-main",
+  "status": "active",
+  "entry": {
+    "type": "markdown",
+    "ref": "aura/market/catalog/skills/agents_main__payment_processing__stripe_integration.md"
+  },
+  "requires_tool_ids": [],
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/payment-processing/skills/stripe-integration/SKILL.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

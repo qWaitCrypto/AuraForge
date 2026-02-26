@@ -1,0 +1,17 @@
+{
+  "id": "skill.market.agents_main.kubernetes_operations.k8s_security_policies.v1",
+  "name": "market:skill:agents_main:kubernetes_operations:k8s_security_policies",
+  "vendor": "agents-main",
+  "status": "active",
+  "entry": {
+    "type": "markdown",
+    "ref": "aura/market/catalog/skills/agents_main__kubernetes_operations__k8s_security_policies.md"
+  },
+  "requires_tool_ids": [],
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/kubernetes-operations/skills/k8s-security-policies/SKILL.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

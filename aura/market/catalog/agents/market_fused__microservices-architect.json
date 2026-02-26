@@ -1,0 +1,41 @@
+{
+  "id": "agent.market.fused.microservices-architect.v1",
+  "name": "microservices-architect",
+  "vendor": "awesome-claude-code-subagents",
+  "status": "active",
+  "summary": "Use when designing distributed system architecture, decomposing monolithic applications into independent microservices, or establishing communication patterns between services at scale.",
+  "role": "microservices-architect",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.backend_development.microservices_patterns.v1",
+    "skill.market.agents_main.backend_development.architecture_patterns.v1",
+    "skill.market.agents_main.backend_development.api_design_principles.v1",
+    "skill.market.agents_main.backend_development.saga_orchestration.v1",
+    "skill.market.agents_main.backend_development.workflow_orchestration_patterns.v1",
+    "skill.market.agents_main.cloud_infrastructure.istio_traffic_management.v1",
+    "skill.market.agents_main.cloud_infrastructure.service_mesh_observability.v1",
+    "skill.market.agents_main.observability_monitoring.distributed_tracing.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.backend_development.feature_development.v1",
+    "tool.market.agents_main.c4_architecture.c4_architecture.v1",
+    "tool.market.agents_main.observability_monitoring.monitor_setup.v1",
+    "tool.market.agents_main.distributed_debugging.debug_trace.v1",
+    "tool.market.agents_main.incident_response.incident_response.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__microservices-architect.md",
+    "upstream_primary_repo": "awesome-claude-code-subagents",
+    "upstream_primary_path": "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/01-core-development/microservices-architect.md",
+    "upstream_alternates": [],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/awesome-claude-code-subagents.MIT.md",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "backend_development",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 1
+  }
+}

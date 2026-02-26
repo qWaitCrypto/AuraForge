@@ -1,0 +1,18 @@
+{
+  "id": "skill.market.agents_main.backend_development.workflow_orchestration_patterns.v1",
+  "name": "market:skill:agents_main:backend_development:workflow_orchestration_patterns",
+  "vendor": "agents-main",
+  "status": "active",
+  "description": "Design durable workflows with Temporal for distributed systems. Covers workflow vs activity separation, saga patterns, state management, and determinism constraints. Use when building long-running processes, distributed transactions, or microservice orchestration.",
+  "source_path": "aura/market/catalog/skills/agents_main__backend_development__workflow_orchestration_patterns.md",
+  "entry": {
+    "type": "markdown",
+    "ref": "aura/market/catalog/skills/agents_main__backend_development__workflow_orchestration_patterns.md"
+  },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/backend-development/skills/workflow-orchestration-patterns/SKILL.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

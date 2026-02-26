@@ -1,0 +1,18 @@
+{
+  "id": "skill.market.agents_main.llm_application_dev.vector_index_tuning.v1",
+  "name": "market:skill:agents_main:llm_application_dev:vector_index_tuning",
+  "vendor": "agents-main",
+  "status": "active",
+  "description": "Optimize vector index performance for latency, recall, and memory. Use when tuning HNSW parameters, selecting quantization strategies, or scaling vector search infrastructure.",
+  "source_path": "aura/market/catalog/skills/agents_main__llm_application_dev__vector_index_tuning.md",
+  "entry": {
+    "type": "markdown",
+    "ref": "aura/market/catalog/skills/agents_main__llm_application_dev__vector_index_tuning.md"
+  },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/llm-application-dev/skills/vector-index-tuning/SKILL.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

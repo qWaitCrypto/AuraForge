@@ -1,0 +1,46 @@
+{
+  "id": "agent.market.fused.tauri-expert.v1",
+  "name": "tauri-expert",
+  "vendor": "claude-code-subagents",
+  "status": "active",
+  "summary": "Expert in Tauri for building cross-platform desktop applications leveraging web technologies.",
+  "role": "tauri-expert",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.systems_programming.memory_safety_patterns.v1",
+    "skill.market.agents_main.javascript_typescript.modern_javascript_patterns.v1",
+    "skill.market.agents_main.javascript_typescript.typescript_advanced_types.v1",
+    "skill.market.agents_main.ui_design.web_component_design.v1",
+    "skill.market.agents_main.ui_design.interaction_design.v1",
+    "skill.market.agents_main.ui_design.responsive_design.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.multi_platform_apps.multi_platform.v1",
+    "tool.market.agents_main.ui_design.create_component.v1",
+    "tool.market.agents_main.ui_design.design_review.v1",
+    "tool.market.agents_main.application_performance.performance_optimization.v1",
+    "tool.mcp.playwright.browser_navigate.v1",
+    "tool.mcp.playwright.browser_snapshot.v1",
+    "tool.mcp.playwright.browser_evaluate.v1",
+    "tool.mcp.playwright.browser_click.v1",
+    "tool.mcp.playwright.browser_type.v1",
+    "tool.mcp.playwright.browser_take_screenshot.v1"
+  ],
+  "mcp_server_ids": [
+    "mcp.market.playwright.v1"
+  ],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__tauri-expert.md",
+    "upstream_primary_repo": "claude-code-subagents",
+    "upstream_primary_path": "dev/agent预备/claude-code-subagents-main/claude-code-subagents-main/agents/tauri-expert.md",
+    "upstream_alternates": [],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/claude-code-subagents.MIT.md",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "multi_platform_apps",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 6
+  }
+}

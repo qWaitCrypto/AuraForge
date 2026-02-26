@@ -1,0 +1,53 @@
+{
+  "id": "agent.market.fused.legacy-modernizer.v1",
+  "name": "legacy-modernizer",
+  "vendor": "agents-main",
+  "status": "active",
+  "summary": "Refactor legacy codebases, migrate outdated frameworks, and implement gradual modernization. Handles technical debt, dependency updates, and backward compatibility. Use PROACTIVELY for legacy system updates, framework migrations, or technical debt reduction.",
+  "role": "legacy-modernizer",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.framework_migration.dependency_upgrade.v1",
+    "skill.market.agents_main.framework_migration.database_migration.v1",
+    "skill.market.agents_main.framework_migration.react_modernization.v1",
+    "skill.market.agents_main.framework_migration.angular_migration.v1",
+    "skill.market.agents_main.developer_essentials.monorepo_management.v1",
+    "skill.market.agents_main.developer_essentials.git_advanced_workflows.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.framework_migration.legacy_modernize.v1",
+    "tool.market.agents_main.framework_migration.code_migrate.v1",
+    "tool.market.agents_main.framework_migration.deps_upgrade.v1",
+    "tool.market.agents_main.code_refactoring.tech_debt.v1",
+    "tool.market.agents_main.code_refactoring.refactor_clean.v1",
+    "tool.market.agents_main.code_refactoring.context_restore.v1",
+    "tool.market.agents_main.git_pr_workflows.git_workflow.v1",
+    "tool.mcp.context7.resolve_library_id.v1",
+    "tool.mcp.context7.get_library_docs.v1",
+    "tool.mcp.sequential_thinking.sequentialthinking.v1"
+  ],
+  "mcp_server_ids": [
+    "mcp.market.context7.v1",
+    "mcp.market.sequential_thinking.v1"
+  ],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__legacy-modernizer.md",
+    "upstream_primary_repo": "agents-main",
+    "upstream_primary_path": "dev/agent预备/agents-main/agents-main/plugins/code-refactoring/agents/legacy-modernizer.md",
+    "upstream_alternates": [
+      "dev/agent预备/agents-main/agents-main/plugins/dependency-management/agents/legacy-modernizer.md",
+      "dev/agent预备/agents-main/agents-main/plugins/framework-migration/agents/legacy-modernizer.md",
+      "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/06-developer-experience/legacy-modernizer.md",
+      "dev/agent预备/claude-code-sub-agents-main/claude-code-sub-agents-main/agents/development/legacy-modernizer.md"
+    ],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md",
+    "source_selection_reason": "agents-main 优先并选 `code-refactoring` 作为遗留现代化的通用起点。",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "code_refactoring",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 2
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "id": "tool.market.agents_main.framework_migration.code_migrate.v1",
+  "name": "market:tool:agents_main:framework_migration:code_migrate",
+  "vendor": "agents-main",
+  "status": "active",
+  "kind": "composite",
+  "runtime_name": "market__agents_main__framework_migration__code_migrate",
+  "aliases": ["code-migrate"],
+  "description": "Plan and execute code migrations between frameworks, languages, versions, and platforms with scripts, risk controls, and rollback guidance.",
+  "entrypoint": {
+    "type": "unknown",
+    "ref": "aura/market/catalog/tools/agents_main__framework_migration__code_migrate.md"
+  },
+  "params_schema": { "type": "object", "properties": {} },
+  "effects": { "side_effect_level": "low", "idempotent": false },
+  "policy": { "approval_required": false, "scope": [] },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/framework-migration/commands/code-migrate.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}
+

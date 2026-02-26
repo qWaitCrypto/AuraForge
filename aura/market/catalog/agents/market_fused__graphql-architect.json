@@ -1,0 +1,51 @@
+{
+  "id": "agent.market.fused.graphql-architect.v1",
+  "name": "graphql-architect",
+  "vendor": "agents-main",
+  "status": "active",
+  "summary": "Master modern GraphQL with federation, performance optimization, and enterprise security. Build scalable schemas, implement advanced caching, and design real-time systems. Use PROACTIVELY for GraphQL architecture or performance optimization.",
+  "role": "graphql-architect",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.backend_development.api_design_principles.v1",
+    "skill.market.agents_main.backend_development.architecture_patterns.v1",
+    "skill.market.agents_main.backend_development.microservices_patterns.v1",
+    "skill.market.agents_main.developer_essentials.auth_implementation_patterns.v1",
+    "skill.market.agents_main.observability_monitoring.distributed_tracing.v1",
+    "skill.market.agents_main.developer_essentials.error_handling_patterns.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.backend_development.feature_development.v1",
+    "tool.market.agents_main.api_testing_observability.api_mock.v1",
+    "tool.market.agents_main.application_performance.performance_optimization.v1",
+    "tool.market.agents_main.security_scanning.security_hardening.v1",
+    "tool.market.agents_main.documentation_generation.doc_generate.v1",
+    "tool.market.agents_main.observability_monitoring.monitor_setup.v1",
+    "tool.mcp.context7.resolve_library_id.v1",
+    "tool.mcp.context7.get_library_docs.v1",
+    "tool.mcp.sequential_thinking.sequentialthinking.v1"
+  ],
+  "mcp_server_ids": [
+    "mcp.market.context7.v1",
+    "mcp.market.sequential_thinking.v1"
+  ],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__graphql-architect.md",
+    "upstream_primary_repo": "agents-main",
+    "upstream_primary_path": "dev/agent预备/agents-main/agents-main/plugins/backend-development/agents/graphql-architect.md",
+    "upstream_alternates": [
+      "dev/agent预备/agents-main/agents-main/plugins/api-scaffolding/agents/graphql-architect.md",
+      "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/01-core-development/graphql-architect.md",
+      "dev/agent预备/claude-code-sub-agents-main/claude-code-sub-agents-main/agents/data-ai/graphql-architect.md"
+    ],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md",
+    "source_selection_reason": "按来源优先先取 agents-main，`backend-development` 相比 `api-scaffolding` 更适合作为长期通用实现。",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "backend_development",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 2
+  }
+}

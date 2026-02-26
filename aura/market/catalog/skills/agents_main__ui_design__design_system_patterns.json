@@ -1,0 +1,17 @@
+{
+  "id": "skill.market.agents_main.ui_design.design_system_patterns.v1",
+  "name": "market:skill:agents_main:ui_design:design_system_patterns",
+  "vendor": "agents-main",
+  "status": "active",
+  "entry": {
+    "type": "markdown",
+    "ref": "aura/market/catalog/skills/agents_main__ui_design__design_system_patterns.md"
+  },
+  "requires_tool_ids": [],
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/ui-design/skills/design-system-patterns/SKILL.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

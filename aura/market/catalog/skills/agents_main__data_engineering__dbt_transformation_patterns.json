@@ -1,0 +1,18 @@
+{
+  "id": "skill.market.agents_main.data_engineering.dbt_transformation_patterns.v1",
+  "name": "market:skill:agents_main:data_engineering:dbt_transformation_patterns",
+  "vendor": "agents-main",
+  "status": "active",
+  "description": "Master dbt (data build tool) for analytics engineering with model organization, testing, documentation, and incremental strategies. Use when building data transformations, creating data models, or implementing analytics engineering best practices.",
+  "source_path": "aura/market/catalog/skills/agents_main__data_engineering__dbt_transformation_patterns.md",
+  "entry": {
+    "type": "markdown",
+    "ref": "aura/market/catalog/skills/agents_main__data_engineering__dbt_transformation_patterns.md"
+  },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/data-engineering/skills/dbt-transformation-patterns/SKILL.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

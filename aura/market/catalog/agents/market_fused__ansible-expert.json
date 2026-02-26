@@ -1,0 +1,35 @@
+{
+  "id": "agent.market.fused.ansible-expert.v1",
+  "name": "ansible-expert",
+  "vendor": "claude-code-subagents",
+  "status": "active",
+  "summary": "Master Ansible automation for configuration management, application deployment, and task orchestration. Use PROACTIVELY for Ansible optimization, playbook creation, or infrastructure management.",
+  "role": "ansible-expert",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.cicd_automation.deployment_pipeline_design.v1",
+    "skill.market.agents_main.cicd_automation.secrets_management.v1",
+    "skill.market.agents_main.shell_scripting.bash_defensive_patterns.v1",
+    "skill.market.agents_main.shell_scripting.bats_testing_patterns.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.cicd_automation.workflow_automate.v1",
+    "tool.market.agents_main.deployment_validation.config_validate.v1",
+    "tool.market.agents_main.security_scanning.security_hardening.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__ansible-expert.md",
+    "upstream_primary_repo": "claude-code-subagents",
+    "upstream_primary_path": "dev/agent预备/claude-code-subagents-main/claude-code-subagents-main/agents/ansible-expert.md",
+    "upstream_alternates": [],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/claude-code-subagents.MIT.md",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "cloud_infrastructure",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 1
+  }
+}

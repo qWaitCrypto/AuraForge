@@ -1,0 +1,36 @@
+{
+  "id": "tool.market.agents_main.database_migrations.migration_observability.v1",
+  "name": "market:tool:agents_main:database_migrations:migration_observability",
+  "vendor": "agents-main",
+  "status": "draft",
+  "kind": "composite",
+  "runtime_name": "market__agents_main__database_migrations__migration_observability",
+  "aliases": [
+    "migration-observability",
+    "migration_observability"
+  ],
+  "description": "Migration monitoring, CDC, and observability infrastructure",
+  "entrypoint": {
+    "type": "unknown",
+    "ref": "aura/market/catalog/tools/agents_main__database_migrations__migration_observability.md"
+  },
+  "params_schema": {
+    "type": "object",
+    "properties": {}
+  },
+  "effects": {
+    "side_effect_level": "high",
+    "idempotent": false
+  },
+  "policy": {
+    "approval_required": true,
+    "scope": []
+  },
+  "metadata": {
+    "risk_level": "high",
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent\u9884\u5907/agents-main/agents-main/plugins/database-migrations/commands/migration-observability.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

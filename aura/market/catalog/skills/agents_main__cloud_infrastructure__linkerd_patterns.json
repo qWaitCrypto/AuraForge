@@ -1,0 +1,19 @@
+{
+  "id": "skill.market.agents_main.cloud_infrastructure.linkerd_patterns.v1",
+  "name": "market:skill:agents_main:cloud_infrastructure:linkerd_patterns",
+  "vendor": "agents-main",
+  "status": "active",
+  "description": "Implement Linkerd service mesh patterns for lightweight, security-focused service mesh deployments. Use when setting up Linkerd, configuring traffic policies, or implementing zero-trust networking with minimal overhead.",
+  "source_path": "aura/market/catalog/skills/agents_main__cloud_infrastructure__linkerd_patterns.md",
+  "entry": {
+    "type": "markdown",
+    "ref": "aura/market/catalog/skills/agents_main__cloud_infrastructure__linkerd_patterns.md"
+  },
+  "requires_tool_ids": [],
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/cloud-infrastructure/skills/linkerd-patterns/SKILL.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

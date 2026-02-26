@@ -1,0 +1,43 @@
+{
+  "id": "agent.market.fused.flutter-expert.v1",
+  "name": "flutter-expert",
+  "vendor": "agents-main",
+  "status": "active",
+  "summary": "Master Flutter development with Dart 3, advanced widgets, and multi-platform deployment. Handles state management, animations, testing, and performance optimization for mobile, web, desktop, and embedded platforms. Use PROACTIVELY for Flutter architecture, UI implementation, or cross-platform features.",
+  "role": "flutter-expert",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.ui_design.mobile_android_design.v1",
+    "skill.market.agents_main.ui_design.mobile_ios_design.v1",
+    "skill.market.agents_main.ui_design.interaction_design.v1",
+    "skill.market.agents_main.ui_design.responsive_design.v1",
+    "skill.market.agents_main.developer_essentials.e2e_testing_patterns.v1",
+    "skill.market.agents_main.developer_essentials.debugging_strategies.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.multi_platform_apps.multi_platform.v1",
+    "tool.market.agents_main.ui_design.create_component.v1",
+    "tool.market.agents_main.ui_design.design_review.v1",
+    "tool.market.agents_main.unit_testing.test_generate.v1",
+    "tool.market.agents_main.application_performance.performance_optimization.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__flutter-expert.md",
+    "upstream_primary_repo": "agents-main",
+    "upstream_primary_path": "dev/agent预备/agents-main/agents-main/plugins/multi-platform-apps/agents/flutter-expert.md",
+    "upstream_alternates": [
+      "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/02-language-specialists/flutter-expert.md",
+      "dev/agent预备/claude-code-subagents-main/claude-code-subagents-main/agents/flutter-expert.md"
+    ],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md",
+    "source_selection_reason": "优先 agents-main，multi-platform 版本与 Flutter 跨平台定位高度一致。",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "multi_platform_apps",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 6
+  }
+}

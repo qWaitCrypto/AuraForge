@@ -1,0 +1,23 @@
+{
+  "id": "tool.market.agents_main.error_diagnostics.smart_debug.v1",
+  "name": "market:tool:agents_main:error_diagnostics:smart_debug",
+  "vendor": "agents-main",
+  "status": "active",
+  "kind": "composite",
+  "runtime_name": "market__agents_main__error_diagnostics__smart_debug",
+  "aliases": ["smart-debug"],
+  "description": "AI-assisted debugging workflow with triage, ranked hypotheses, and observability-driven investigation.",
+  "entrypoint": {
+    "type": "unknown",
+    "ref": "aura/market/catalog/tools/agents_main__error_diagnostics__smart_debug.md"
+  },
+  "params_schema": { "type": "object", "properties": {} },
+  "effects": { "side_effect_level": "low", "idempotent": false },
+  "policy": { "approval_required": false, "scope": [] },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/error-diagnostics/commands/smart-debug.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

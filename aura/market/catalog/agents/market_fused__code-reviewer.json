@@ -1,0 +1,51 @@
+{
+  "id": "agent.market.fused.code-reviewer.v1",
+  "name": "code-reviewer",
+  "vendor": "agents-main",
+  "status": "active",
+  "summary": "Elite code review expert specializing in modern AI-powered code analysis, security vulnerabilities, performance optimization, and production reliability. Masters static analysis tools, security scanning, and configura...",
+  "role": "code-reviewer",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.developer_essentials.code_review_excellence.v1",
+    "skill.market.agents_main.developer_essentials.debugging_strategies.v1",
+    "skill.market.agents_main.security_scanning.sast_configuration.v1",
+    "skill.market.agents_main.security_scanning.security_requirement_extraction.v1",
+    "skill.market.agents_main.security_scanning.stride_analysis_patterns.v1",
+    "skill.market.agents_main.security_scanning.threat_mitigation_mapping.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.comprehensive_review.full_review.v1",
+    "tool.market.agents_main.comprehensive_review.pr_enhance.v1",
+    "tool.market.agents_main.security_scanning.security_sast.v1",
+    "tool.market.agents_main.security_scanning.security_dependencies.v1",
+    "tool.market.agents_main.security_scanning.security_hardening.v1",
+    "tool.market.agents_main.dependency_management.deps_audit.v1",
+    "tool.market.agents_main.performance_testing_review.ai_review.v1",
+    "tool.market.agents_main.performance_testing_review.multi_agent_review.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__code-reviewer.md",
+    "upstream_primary_repo": "agents-main",
+    "upstream_primary_path": "dev/agent预备/agents-main/agents-main/plugins/comprehensive-review/agents/code-reviewer.md",
+    "upstream_alternates": [
+      "dev/agent预备/agents-main/agents-main/plugins/code-documentation/agents/code-reviewer.md",
+      "dev/agent预备/agents-main/agents-main/plugins/code-refactoring/agents/code-reviewer.md",
+      "dev/agent预备/agents-main/agents-main/plugins/codebase-cleanup/agents/code-reviewer.md",
+      "dev/agent预备/agents-main/agents-main/plugins/git-pr-workflows/agents/code-reviewer.md",
+      "dev/agent预备/agents-main/agents-main/plugins/incident-response/agents/code-reviewer.md",
+      "dev/agent预备/agents-main/agents-main/plugins/tdd-workflows/agents/code-reviewer.md",
+      "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/04-quality-security/code-reviewer.md"
+    ],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md",
+    "source_selection_reason": "agents-main 优先下选 `comprehensive-review`，可避免文档、重构或事故场景的局部偏置。",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "comprehensive_review",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 2
+  }
+}

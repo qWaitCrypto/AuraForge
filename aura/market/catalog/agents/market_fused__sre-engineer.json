@@ -1,0 +1,44 @@
+{
+  "id": "agent.market.fused.sre-engineer.v1",
+  "name": "sre-engineer",
+  "vendor": "awesome-claude-code-subagents",
+  "status": "active",
+  "summary": "Use this agent when you need to establish or improve system reliability through SLO definition, error budget management, and automation. Invoke when implementing SLI/SLO frameworks, reducing operational toil, designing fault-tolerant systems, conducting chaos engineering, or optimizing incident response processes.",
+  "role": "sre-engineer",
+  "capabilities": [],
+  "skill_ids": [
+    "skill.market.agents_main.observability_monitoring.slo_implementation.v1",
+    "skill.market.agents_main.observability_monitoring.prometheus_configuration.v1",
+    "skill.market.agents_main.observability_monitoring.grafana_dashboards.v1",
+    "skill.market.agents_main.observability_monitoring.distributed_tracing.v1",
+    "skill.market.agents_main.incident_response.incident_runbook_templates.v1",
+    "skill.market.agents_main.incident_response.on_call_handoff_patterns.v1",
+    "skill.market.agents_main.incident_response.postmortem_writing.v1",
+    "skill.market.agents_main.cloud_infrastructure.service_mesh_observability.v1"
+  ],
+  "tool_ids": [
+    "tool.market.agents_main.incident_response.incident_response.v1",
+    "tool.market.agents_main.incident_response.smart_fix.v1",
+    "tool.market.agents_main.observability_monitoring.monitor_setup.v1",
+    "tool.market.agents_main.observability_monitoring.slo_implement.v1",
+    "tool.market.agents_main.distributed_debugging.debug_trace.v1",
+    "tool.market.agents_main.error_diagnostics.error_analysis.v1",
+    "tool.market.agents_main.deployment_validation.config_validate.v1",
+    "tool.market.agents_main.team_collaboration.issue.v1"
+  ],
+  "mcp_server_ids": [],
+  "metadata": {
+    "source_strategy": "shortlist-v1-fused",
+    "prompt_ref": "aura/market/catalog/agents/market_fused__sre-engineer.md",
+    "upstream_primary_repo": "awesome-claude-code-subagents",
+    "upstream_primary_path": "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/03-infrastructure/sre-engineer.md",
+    "upstream_alternates": [],
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/awesome-claude-code-subagents.MIT.md",
+    "relation_profile": "manual-deep-v2",
+    "relation_primary_plugin": "incident_response",
+    "relation_updated_at": "2026-02-26",
+    "relation_refined_at": "2026-02-26",
+    "relation_refined_batch": 4
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "id": "tool.market.agents_main.javascript_typescript.typescript_scaffold.v1",
+  "name": "market:tool:agents_main:javascript_typescript:typescript_scaffold",
+  "vendor": "agents-main",
+  "status": "draft",
+  "kind": "composite",
+  "runtime_name": "market__agents_main__javascript_typescript__typescript_scaffold",
+  "aliases": [
+    "typescript-scaffold",
+    "typescript_scaffold"
+  ],
+  "description": "TypeScript Project Scaffolding",
+  "entrypoint": {
+    "type": "unknown",
+    "ref": "aura/market/catalog/tools/agents_main__javascript_typescript__typescript_scaffold.md"
+  },
+  "params_schema": {
+    "type": "object",
+    "properties": {}
+  },
+  "effects": {
+    "side_effect_level": "high",
+    "idempotent": false
+  },
+  "policy": {
+    "approval_required": true,
+    "scope": []
+  },
+  "metadata": {
+    "risk_level": "high",
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/javascript-typescript/commands/typescript-scaffold.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "id": "skill.market.agents_main.frontend_mobile_development.react_native_architecture.v1",
+  "name": "market:skill:agents_main:frontend_mobile_development:react_native_architecture",
+  "vendor": "agents-main",
+  "status": "active",
+  "description": "Build production React Native apps with Expo, navigation, native modules, offline sync, and cross-platform patterns. Use when developing mobile apps, implementing native integrations, or architecting React Native projects.",
+  "source_path": "aura/market/catalog/skills/agents_main__frontend_mobile_development__react_native_architecture.md",
+  "entry": {
+    "type": "markdown",
+    "ref": "aura/market/catalog/skills/agents_main__frontend_mobile_development__react_native_architecture.md"
+  },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/frontend-mobile-development/skills/react-native-architecture/SKILL.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

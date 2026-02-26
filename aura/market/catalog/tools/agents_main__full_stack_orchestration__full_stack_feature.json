@@ -1,0 +1,36 @@
+{
+  "id": "tool.market.agents_main.full_stack_orchestration.full_stack_feature.v1",
+  "name": "market:tool:agents_main:full_stack_orchestration:full_stack_feature",
+  "vendor": "agents-main",
+  "status": "draft",
+  "kind": "composite",
+  "runtime_name": "market__agents_main__full_stack_orchestration__full_stack_feature",
+  "aliases": [
+    "full-stack-feature",
+    "full_stack_feature"
+  ],
+  "description": "Orchestrate end-to-end full-stack feature development across backend, frontend, database, and infrastructure layers",
+  "entrypoint": {
+    "type": "unknown",
+    "ref": "aura/market/catalog/tools/agents_main__full_stack_orchestration__full_stack_feature.md"
+  },
+  "params_schema": {
+    "type": "object",
+    "properties": {}
+  },
+  "effects": {
+    "side_effect_level": "high",
+    "idempotent": false
+  },
+  "policy": {
+    "approval_required": true,
+    "scope": []
+  },
+  "metadata": {
+    "risk_level": "high",
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/full-stack-orchestration/commands/full-stack-feature.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

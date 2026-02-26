@@ -1,0 +1,18 @@
+{
+  "id": "tool.mcp.context7.resolve_library_id.v1",
+  "name": "mcp:context7:resolve-library-id",
+  "vendor": "mcp",
+  "status": "draft",
+  "kind": "mcp_proxy",
+  "runtime_name": "mcp__context7__resolve-library-id",
+  "aliases": ["mcp__context7__resolve-library-id", "context7:resolve-library-id", "resolve-library-id"],
+  "description": "Resolve a library identifier by name (Context7 MCP).",
+  "entrypoint": { "type": "mcp", "ref": "context7:resolve-library-id" },
+  "params_schema": { "type": "object", "properties": {} },
+  "effects": { "side_effect_level": "high", "idempotent": false },
+  "runtime": { "timeout_sec": 60, "retry": { "max_attempts": 1 } },
+  "policy": { "approval_required": true, "approval_level": "high", "scope": [] },
+  "mcp_binding": { "server_id": "mcp.market.context7.v1", "remote_tool": "resolve-library-id" },
+  "metadata": { "notes": "Market template; runtime MCP discovery may overwrite schemas and binding server_id." }
+}
+

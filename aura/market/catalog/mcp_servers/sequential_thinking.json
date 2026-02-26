@@ -1,0 +1,22 @@
+{
+  "id": "mcp.market.sequential_thinking.v1",
+  "name": "sequential-thinking",
+  "vendor": "sequential-thinking",
+  "status": "active",
+  "enabled": false,
+  "transport": "unknown",
+  "auth": { "type": "none", "scopes": [] },
+  "healthcheck": { "interval_sec": 60, "timeout_sec": 3 },
+  "timeout_sec": 60,
+  "provides_tools": [
+    {
+      "remote_name": "sequentialthinking",
+      "tool_id": "tool.mcp.sequential_thinking.sequentialthinking.v1",
+      "description": "Structured step-by-step reasoning helper."
+    }
+  ],
+  "metadata": {
+    "notes": "Market template only; configure a real MCP server in .aura/config/mcp.json to enable."
+  }
+}
+

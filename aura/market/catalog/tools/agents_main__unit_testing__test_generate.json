@@ -1,0 +1,24 @@
+{
+  "id": "tool.market.agents_main.unit_testing.test_generate.v1",
+  "name": "market:tool:agents_main:unit_testing:test_generate",
+  "vendor": "agents-main",
+  "license_path": "aura/market/catalog/licenses/agents-main.MIT.md",
+  "status": "active",
+  "kind": "composite",
+  "runtime_name": "market__agents_main__unit_testing__test_generate",
+  "aliases": ["test-generate"],
+  "description": "Generate comprehensive, maintainable unit tests across multiple languages and frameworks",
+  "entrypoint": {
+    "type": "unknown",
+    "ref": "aura/market/catalog/tools/agents_main__unit_testing__test_generate.md"
+  },
+  "params_schema": { "type": "object", "properties": {} },
+  "effects": { "side_effect_level": "low", "idempotent": false },
+  "policy": { "approval_required": false, "scope": [] },
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/unit-testing/commands/test-generate.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}

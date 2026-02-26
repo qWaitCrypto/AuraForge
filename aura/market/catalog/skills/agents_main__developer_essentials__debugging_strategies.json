@@ -1,0 +1,17 @@
+{
+  "id": "skill.market.agents_main.developer_essentials.debugging_strategies.v1",
+  "name": "market:skill:agents_main:developer_essentials:debugging_strategies",
+  "vendor": "agents-main",
+  "status": "active",
+  "entry": {
+    "type": "markdown",
+    "ref": "aura/market/catalog/skills/agents_main__developer_essentials__debugging_strategies.md"
+  },
+  "requires_tool_ids": [],
+  "metadata": {
+    "upstream_repo": "agents-main",
+    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/developer-essentials/skills/debugging-strategies/SKILL.md",
+    "upstream_license": "MIT",
+    "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
+  }
+}
