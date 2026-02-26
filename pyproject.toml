@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "auraforge"
+version = "0.1.0"
+description = "AuraForge CLI (powered by migrated Aura core)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+auraforge = "aura.cli:main"
+aura = "aura.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["aura*"]
