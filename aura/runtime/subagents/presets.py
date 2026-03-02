@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.resources
+import json
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -32,170 +33,70 @@ class SubagentPreset:
         return load_prompt_asset(self.prompt_asset)
 
 
-_PRESETS: dict[str, SubagentPreset] = {
-    "file_ops_worker": SubagentPreset(
-        name="file_ops_worker",
-        prompt_asset="agent_file_ops_worker.md",
-        default_allowlist=[
-            "project__list_dir",
-            "project__glob",
-            "project__read_text",
-            "project__read_text_many",
-            "project__apply_edits",
-            "shell__run",
-            "snapshot__create",
-            "snapshot__diff",
-            "audit__query",
-        ],
-        limits=SubagentLimits(max_turns=12, max_tool_calls=24),
-    ),
-    "doc_worker": SubagentPreset(
-        name="doc_worker",
-        prompt_asset="agent_doc_worker.md",
-        default_allowlist=[
-            # Skills (docx/pdf)
-            "skill__list",
-            "skill__load",
-            "skill__read_file",
+def _load_presets() -> dict[str, SubagentPreset]:
+    try:
+        raw = (
+            importlib.resources.files("aura.runtime")
+            .joinpath("subagents", "presets.json")
+            .read_text(encoding="utf-8", errors="replace")
+        )
+        payload = json.loads(raw)
+    except Exception:
+        return {}
 
-            # Project IO
-            "project__list_dir",
-            "project__glob",
-            "project__read_text",
-            "project__read_text_many",
-            "project__apply_edits",
-            "project__search_text",
+    if not isinstance(payload, list):
+        return {}
 
-            # Execute skill scripts (approval-gated via ToolRuntime + approval agent)
-            "shell__run",
+    out: dict[str, SubagentPreset] = {}
+    for row in payload:
+        if not isinstance(row, dict):
+            continue
 
-            "snapshot__create",
-            "snapshot__diff",
-            "audit__query",
-        ],
-        limits=SubagentLimits(max_turns=12, max_tool_calls=24),
-        # Auto-approve running the *skill runner* script (see subagents/runner.py safety checks).
-        safe_shell_prefixes=[
-            ".aura/skills/aura-docx/scripts/run.py",
-            ".aura/skills/aura-pdf/scripts/run.py",
-        ],
-    ),
-    "sheet_worker": SubagentPreset(
-        name="sheet_worker",
-        prompt_asset="agent_sheet_worker.md",
-        default_allowlist=[
-            # Skills (xlsx)
-            "skill__list",
-            "skill__load",
-            "skill__read_file",
+        name = str(row.get("name") or "").strip()
+        prompt_asset = str(row.get("prompt_asset") or "").strip()
+        if not name or not prompt_asset:
+            continue
 
-            # Project IO
-            "project__list_dir",
-            "project__glob",
-            "project__read_text",
-            "project__read_text_many",
-            "project__apply_edits",
-            "project__search_text",
+        allow = row.get("default_allowlist")
+        default_allowlist = [str(item).strip() for item in allow if isinstance(item, str) and str(item).strip()] if isinstance(allow, list) else []
 
-            # Execute skill scripts (approval-gated via ToolRuntime + approval agent)
-            "shell__run",
+        limits_raw = row.get("limits")
+        if not isinstance(limits_raw, dict):
+            continue
+        try:
+            limits = SubagentLimits(
+                max_turns=int(limits_raw.get("max_turns")),
+                max_tool_calls=int(limits_raw.get("max_tool_calls")),
+            )
+        except Exception:
+            continue
 
-            "snapshot__create",
-            "snapshot__diff",
-            "audit__query",
-        ],
-        limits=SubagentLimits(max_turns=12, max_tool_calls=24),
-        # Auto-approve running the *skill runner* script (see subagents/runner.py safety checks).
-        safe_shell_prefixes=[
-            ".aura/skills/aura-xlsx/scripts/run.py",
-        ],
-    ),
-    "browser_worker": SubagentPreset(
-        name="browser_worker",
-        prompt_asset="agent_browser_worker.md",
-        default_allowlist=[
-            "skill__list",
-            "skill__load",
-            "skill__read_file",
-            "browser__run",
-            "audit__query",
-        ],
-        limits=SubagentLimits(max_turns=20, max_tool_calls=50),
-        safe_shell_prefixes=[],
-        # Testing mode: allow browser automation without approval prompts.
-        auto_approve_tools=["browser__run"],
-    ),
-    "market_worker": SubagentPreset(
-        name="market_worker",
-        prompt_asset="agent_market_worker.md",
-        default_allowlist=[
-            # Project I/O and edits.
-            "project__list_dir",
-            "project__glob",
-            "project__read_text",
-            "project__read_text_many",
-            "project__search_text",
-            "project__text_stats",
-            "project__apply_edits",
-            "project__apply_patch",
-            "project__patch",
-            "project__aigc_detect",
+        safe_prefixes_raw = row.get("safe_shell_prefixes")
+        safe_shell_prefixes = (
+            [str(item).strip() for item in safe_prefixes_raw if isinstance(item, str) and str(item).strip()]
+            if isinstance(safe_prefixes_raw, list)
+            else []
+        )
+        auto_tools_raw = row.get("auto_approve_tools")
+        auto_approve_tools = (
+            [str(item).strip() for item in auto_tools_raw if isinstance(item, str) and str(item).strip()]
+            if isinstance(auto_tools_raw, list)
+            else []
+        )
 
-            # Local execution and browser automation.
-            "shell__run",
-            "browser__run",
+        out[name] = SubagentPreset(
+            name=name,
+            prompt_asset=prompt_asset,
+            default_allowlist=default_allowlist,
+            limits=limits,
+            safe_shell_prefixes=safe_shell_prefixes,
+            auto_approve_tools=auto_approve_tools,
+        )
 
-            # Skills.
-            "skill__list",
-            "skill__load",
-            "skill__read_file",
+    return out
 
-            # Snapshots.
-            "snapshot__create",
-            "snapshot__diff",
-            "snapshot__list",
-            "snapshot__read_text",
-            "snapshot__rollback",
 
-            # Spec read-only querying.
-            "spec__query",
-            "spec__get",
-            "spec__list_assets",
-            "spec__get_asset",
-
-            # Session context lookup.
-            "session__search",
-
-            # Signal/audit collaboration.
-            "signal__send",
-            "signal__poll",
-            "audit__query",
-            "audit__refs",
-        ],
-        limits=SubagentLimits(max_turns=20, max_tool_calls=60),
-        safe_shell_prefixes=[],
-        auto_approve_tools=["browser__run"],
-    ),
-    "verifier": SubagentPreset(
-        name="verifier",
-        prompt_asset="agent_verifier.md",
-        default_allowlist=[
-            "project__list_dir",
-            "project__glob",
-            "project__read_text",
-            "project__read_text_many",
-            "project__search_text",
-            "snapshot__list",
-            "spec__query",
-            "spec__get",
-            "snapshot__read_text",
-            "snapshot__diff",
-            "session__search",
-            "audit__query",
-        ],
-        limits=SubagentLimits(max_turns=6, max_tool_calls=12),
-    ),
-}
+_PRESETS: dict[str, SubagentPreset] = _load_presets()
 
 
 def get_preset(name: str) -> SubagentPreset | None:

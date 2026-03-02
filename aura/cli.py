@@ -1562,12 +1562,17 @@ def _cmd_sandbox_create(args: argparse.Namespace) -> int:
         return EXIT_CONFIG_ERROR
 
     manager = SandboxManager(project_root=paths.project_root)
+    sandbox_id_raw = getattr(args, "sandbox_id", None)
+    sandbox_id = None
+    if isinstance(sandbox_id_raw, str):
+        cleaned = sandbox_id_raw.strip()
+        sandbox_id = cleaned or None
     try:
         sandbox = manager.create(
             agent_id=str(getattr(args, "agent_id", "") or "").strip(),
             issue_key=str(getattr(args, "issue_key", "") or "").strip(),
             base_branch=str(getattr(args, "base_branch", "main") or "main").strip() or "main",
-            sandbox_id=(str(getattr(args, "sandbox_id", "")).strip() or None),
+            sandbox_id=sandbox_id,
         )
     except Exception as e:
         print(str(e), file=sys.stderr)

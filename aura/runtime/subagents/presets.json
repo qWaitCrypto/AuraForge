@@ -1,0 +1,164 @@
+[
+  {
+    "name": "file_ops_worker",
+    "prompt_asset": "agent_file_ops_worker.md",
+    "default_allowlist": [
+      "project__list_dir",
+      "project__glob",
+      "project__read_text",
+      "project__read_text_many",
+      "project__apply_edits",
+      "shell__run",
+      "snapshot__create",
+      "snapshot__diff",
+      "audit__query"
+    ],
+    "limits": {
+      "max_turns": 12,
+      "max_tool_calls": 24
+    },
+    "safe_shell_prefixes": [],
+    "auto_approve_tools": []
+  },
+  {
+    "name": "doc_worker",
+    "prompt_asset": "agent_doc_worker.md",
+    "default_allowlist": [
+      "skill__list",
+      "skill__load",
+      "skill__read_file",
+      "project__list_dir",
+      "project__glob",
+      "project__read_text",
+      "project__read_text_many",
+      "project__apply_edits",
+      "project__search_text",
+      "shell__run",
+      "snapshot__create",
+      "snapshot__diff",
+      "audit__query"
+    ],
+    "limits": {
+      "max_turns": 12,
+      "max_tool_calls": 24
+    },
+    "safe_shell_prefixes": [
+      ".aura/skills/aura-docx/scripts/run.py",
+      ".aura/skills/aura-pdf/scripts/run.py"
+    ],
+    "auto_approve_tools": []
+  },
+  {
+    "name": "sheet_worker",
+    "prompt_asset": "agent_sheet_worker.md",
+    "default_allowlist": [
+      "skill__list",
+      "skill__load",
+      "skill__read_file",
+      "project__list_dir",
+      "project__glob",
+      "project__read_text",
+      "project__read_text_many",
+      "project__apply_edits",
+      "project__search_text",
+      "shell__run",
+      "snapshot__create",
+      "snapshot__diff",
+      "audit__query"
+    ],
+    "limits": {
+      "max_turns": 12,
+      "max_tool_calls": 24
+    },
+    "safe_shell_prefixes": [
+      ".aura/skills/aura-xlsx/scripts/run.py"
+    ],
+    "auto_approve_tools": []
+  },
+  {
+    "name": "browser_worker",
+    "prompt_asset": "agent_browser_worker.md",
+    "default_allowlist": [
+      "skill__list",
+      "skill__load",
+      "skill__read_file",
+      "browser__run",
+      "audit__query"
+    ],
+    "limits": {
+      "max_turns": 20,
+      "max_tool_calls": 50
+    },
+    "safe_shell_prefixes": [],
+    "auto_approve_tools": [
+      "browser__run"
+    ]
+  },
+  {
+    "name": "market_worker",
+    "prompt_asset": "agent_market_worker.md",
+    "default_allowlist": [
+      "project__list_dir",
+      "project__glob",
+      "project__read_text",
+      "project__read_text_many",
+      "project__search_text",
+      "project__text_stats",
+      "project__apply_edits",
+      "project__apply_patch",
+      "project__patch",
+      "project__aigc_detect",
+      "shell__run",
+      "browser__run",
+      "skill__list",
+      "skill__load",
+      "skill__read_file",
+      "snapshot__create",
+      "snapshot__diff",
+      "snapshot__list",
+      "snapshot__read_text",
+      "snapshot__rollback",
+      "spec__query",
+      "spec__get",
+      "spec__list_assets",
+      "spec__get_asset",
+      "session__search",
+      "signal__send",
+      "signal__poll",
+      "audit__query",
+      "audit__refs"
+    ],
+    "limits": {
+      "max_turns": 20,
+      "max_tool_calls": 60
+    },
+    "safe_shell_prefixes": [],
+    "auto_approve_tools": [
+      "browser__run"
+    ]
+  },
+  {
+    "name": "verifier",
+    "prompt_asset": "agent_verifier.md",
+    "default_allowlist": [
+      "project__list_dir",
+      "project__glob",
+      "project__read_text",
+      "project__read_text_many",
+      "project__search_text",
+      "snapshot__list",
+      "spec__query",
+      "spec__get",
+      "snapshot__read_text",
+      "snapshot__diff",
+      "session__search",
+      "audit__query"
+    ],
+    "limits": {
+      "max_turns": 6,
+      "max_tool_calls": 12
+    },
+    "safe_shell_prefixes": [],
+    "auto_approve_tools": []
+  }
+]

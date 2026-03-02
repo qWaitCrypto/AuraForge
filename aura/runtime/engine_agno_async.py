@@ -1975,7 +1975,12 @@ class AgnoAsyncEngine:
         system = "\n\n".join(parts)
         return CanonicalRequest(system=system, messages=list(self._history or []), tools=tools)
 
-    async def _load_mcp_tooling(self, *, stack: AsyncExitStack) -> tuple[dict[str, Any], list[ToolSpec]]:
+    async def _load_mcp_tooling(
+        self,
+        *,
+        stack: AsyncExitStack,
+        server_names: set[str] | None = None,
+    ) -> tuple[dict[str, Any], list[ToolSpec]]:
         """
         Build MCPTools instances from `.aura/config/mcp.json`, enter them, and return:
         - mapping: tool_name -> agno Function (async)
@@ -2004,7 +2009,10 @@ class AgnoAsyncEngine:
             base = normalized[:12]
             return f"mcp__{base}_{digest}__"
 
+        selected_servers = set(server_names or [])
         for name, server in sorted(cfg.servers.items()):
+            if selected_servers and name not in selected_servers:
+                continue
             if not server.enabled:
                 continue
             if not server.command:

@@ -20,3 +20,13 @@ What it demonstrates:
 - bid/assignment/work completion represented as audit events,
 - `audit__query` + `audit__refs` verification output,
 - local check that `mcpServers.linear` exists in `.aura/config/mcp.json`.
+
+## Phase 3 Acceptance Check
+
+Run:
+
+```bash
+python -m aura.runtime.examples.phase3_acceptance_check
+```
+
+This command validates roadmap acceptance targets across Phase 0-3 and returns a JSON report with per-check PASS/FAIL.
