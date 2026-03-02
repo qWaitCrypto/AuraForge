@@ -13,6 +13,8 @@ from typing import Any
 
 from .agent_surface import SpecStatusSummary, build_agent_surface
 from .approval import ApprovalDecision, ApprovalRecord, ApprovalStatus
+from .capability import CapabilityBuilder
+from .context import ContextBuilder
 from .context_mgmt import (
     approx_tokens_from_json,
     canonical_request_to_dict,
@@ -21,6 +23,7 @@ from .context_mgmt import (
 )
 from .error_codes import ErrorCode
 from .event_bus import EventBus
+from .event_log import EventLog, EventLogFileStore, extract_external_refs, summarize_tool_args, summarize_tool_result
 from .ids import new_id, new_tool_call_id, now_ts_ms
 from .llm.config import ModelConfig
 from .llm.client_exec_anthropic import complete_anthropic, stream_anthropic
@@ -44,7 +47,8 @@ from .llm.types import (
     ToolCall,
     ToolSpec,
 )
-from .models import WorkSpec
+from .models import ROLE_WORKER, Sandbox, WorkSpec
+from .models.event_log import LogEvent, LogEventKind
 from .orchestrator_helpers import (
     _canonical_request_to_redacted_dict,
     _summarize_text,
@@ -55,13 +59,17 @@ from .protocol import ArtifactRef, Event, EventKind, Op, OpKind
 from .run_snapshots import PendingToolCall as SnapshotPendingToolCall
 from .run_snapshots import RunSnapshot, delete_run_snapshot, read_run_snapshot, write_run_snapshot
 from .registry import SpecRegistry, SpecResolver
+from .sandbox import SandboxManager
 from .skills import SkillStore, seed_builtin_skills
+from .signal import SignalBus, SignalStore
 from .snapshots import GitSnapshotBackend
 from .spec_workflow import SpecProposalStore, SpecStateStore, SpecStore
 from .stores import ApprovalStore, ArtifactStore, EventLogStore, SessionStore
 from .mcp.config import load_mcp_config
 from .workspace import WorkspaceManager
 from .tools import (
+    AuditQueryTool,
+    AuditRefsTool,
     ProjectAIGCDetectTool,
     ProjectApplyEditsTool,
     ProjectApplyPatchTool,
@@ -75,6 +83,8 @@ from .tools import (
     SessionExportTool,
     SessionSearchTool,
     ShellRunTool,
+    SignalPollTool,
+    SignalSendTool,
     SkillListTool,
     SkillLoadTool,
     SkillReadFileTool,
@@ -178,6 +188,7 @@ _BASE_EXPOSED_TOOL_NAMES: set[str] = {
     "project__text_stats",
     # Project filesystem (write)
     "project__apply_edits",
+    "project__apply_patch",
     "project__patch",
     # System / network (approval-gated)
     "shell__run",
@@ -190,6 +201,11 @@ _BASE_EXPOSED_TOOL_NAMES: set[str] = {
     "skill__list",
     "skill__load",
     "skill__read_file",
+    # Audit / signal
+    "audit__query",
+    "audit__refs",
+    "signal__send",
+    "signal__poll",
     # Spec workflow
     "spec__query",
     "spec__get",
@@ -270,6 +286,11 @@ class AgnoAsyncEngine:
     snapshot_backend: GitSnapshotBackend = field(init=False)
     spec_registry: SpecRegistry = field(init=False)
     spec_resolver: SpecResolver = field(init=False)
+    sandbox_manager: SandboxManager = field(init=False)
+    event_log: EventLog = field(init=False)
+    signal_bus: SignalBus = field(init=False)
+    capability_builder: CapabilityBuilder = field(init=False)
+    context_builder: ContextBuilder = field(init=False)
     workspace_manager: WorkspaceManager = field(init=False)
 
     _history: list[CanonicalMessage] | None = field(default=None, init=False)
@@ -297,6 +318,9 @@ class AgnoAsyncEngine:
         self.snapshot_backend = GitSnapshotBackend(project_root=self.project_root)
         self.spec_registry = SpecRegistry(project_root=self.project_root)
         self.spec_resolver = SpecResolver(registry=self.spec_registry)
+        self.sandbox_manager = SandboxManager(project_root=self.project_root)
+        self.event_log = EventLog(store=EventLogFileStore(project_root=self.project_root))
+        self.signal_bus = SignalBus(store=SignalStore(project_root=self.project_root))
         self.workspace_manager = WorkspaceManager(project_root=self.project_root)
 
         if self.max_tool_turns < 1:
@@ -319,6 +343,10 @@ class AgnoAsyncEngine:
         registry.register(BrowserRunTool(artifact_store=self.artifact_store))
         registry.register(SessionSearchTool())
         registry.register(SessionExportTool())
+        registry.register(AuditQueryTool(event_log=self.event_log))
+        registry.register(AuditRefsTool(event_log=self.event_log))
+        registry.register(SignalSendTool(signal_bus=self.signal_bus))
+        registry.register(SignalPollTool(signal_bus=self.signal_bus))
         registry.register(WorkspaceCreateOrGetTool(self.workspace_manager))
         registry.register(WorkspaceProvisionWorkbenchTool(self.workspace_manager))
         registry.register(WorkspaceContextTool(self.workspace_manager))
@@ -362,6 +390,12 @@ class AgnoAsyncEngine:
         registry.register(SnapshotRollbackTool(self.snapshot_backend))
 
         tool_runtime = ToolRuntime(project_root=self.project_root, registry=registry, artifact_store=self.artifact_store)
+        self.capability_builder = CapabilityBuilder(
+            spec_resolver=self.spec_resolver,
+            tool_registry=registry,
+            project_root=self.project_root,
+        )
+        self.context_builder = ContextBuilder(project_root=self.project_root, spec_resolver=self.spec_resolver)
 
         try:
             from .tools.subagent_runner import SubagentRunTool
@@ -372,6 +406,9 @@ class AgnoAsyncEngine:
                 tool_runtime=tool_runtime,
                 artifact_store=self.artifact_store,
                 spec_resolver=self.spec_resolver,
+                capability_builder=self.capability_builder,
+                context_builder=self.context_builder,
+                sandbox_manager=self.sandbox_manager,
                 workspace_manager=self.workspace_manager,
             )
             registry.register(subagent_tool)
@@ -1816,11 +1853,14 @@ class AgnoAsyncEngine:
 
         return adapt_tool_specs_for_profile(tools=tools, profile=profile)
 
-    def _current_workspace_role(self) -> str | None:
+    def _session_workspace_binding(self) -> Any | None:
         try:
-            binding = self.workspace_manager.get_session_binding(session_id=self.session_id)
+            return self.workspace_manager.get_session_binding(session_id=self.session_id)
         except Exception:
-            binding = None
+            return None
+
+    def _current_workspace_role(self) -> str | None:
+        binding = self._session_workspace_binding()
         if binding is None:
             return None
         if binding.role is not None:
@@ -1833,15 +1873,64 @@ class AgnoAsyncEngine:
             return wb.role.value
         return None
 
-    def _is_workbench_bound_session(self) -> bool:
+    def _current_agent_id(self) -> str:
+        binding = self._session_workspace_binding()
+        if binding is not None and isinstance(binding.agent_id, str) and binding.agent_id.strip():
+            return binding.agent_id.strip()
+        return self.session_id
+
+    def _current_sandbox(self) -> Sandbox | None:
         try:
-            return self.workspace_manager.get_session_binding(session_id=self.session_id) is not None
+            resolved = self.workspace_manager.resolve_context(session_id=self.session_id)
         except Exception:
-            return False
+            return None
+        ws = getattr(resolved, "workspace", None)
+        wb = getattr(resolved, "workbench", None)
+        if ws is None or wb is None:
+            return None
+        issue_key = str(getattr(getattr(ws, "issue_ref", None), "key", "") or "").strip()
+        worktree_path = str(getattr(wb, "worktree_path", "") or "").strip()
+        branch = str(getattr(wb, "branch", "") or "").strip()
+        if not issue_key or not worktree_path or not branch:
+            return None
+        raw_workbench_id = str(getattr(wb, "workbench_id", "") or "").strip() or new_id("sb")
+        sandbox_id = raw_workbench_id if raw_workbench_id.startswith("sb_") else f"sb_{raw_workbench_id}"
+        try:
+            return Sandbox(
+                sandbox_id=sandbox_id,
+                agent_id=self._current_agent_id(),
+                issue_key=issue_key,
+                worktree_path=worktree_path,
+                branch=branch,
+                base_branch=str(getattr(ws, "base_branch", "main") or "main"),
+                created_at=int(getattr(wb, "created_at", now_ts_ms()) or now_ts_ms()),
+            )
+        except Exception:
+            return None
+
+    def _is_workbench_bound_session(self) -> bool:
+        return self._session_workspace_binding() is not None
 
     def _exposed_tool_names_for_session(self) -> set[str]:
+        role = (self._current_workspace_role() or ROLE_WORKER).strip().lower()
+        agent_id = self._current_agent_id()
+        if self.capability_builder is not None:
+            try:
+                surface = self.capability_builder.build(agent_id=agent_id, role=role)
+            except Exception:
+                surface = None
+            if surface is not None:
+                names = set(surface.tool_allowlist)
+                if str(surface.resolved_from or "") != "agent_spec":
+                    names.update(_BASE_EXPOSED_TOOL_NAMES)
+                    if role == "integrator":
+                        names.update(_INTEGRATOR_EXPOSED_TOOL_NAMES)
+                names.difference_update(_INTERNAL_WORKSPACE_TOOL_NAMES)
+                if self._is_workbench_bound_session():
+                    names.difference_update(_WORKBENCH_HIDDEN_TOOL_NAMES)
+                return names
+
         names = set(_BASE_EXPOSED_TOOL_NAMES)
-        role = (self._current_workspace_role() or "").strip().lower()
         if role == "integrator":
             names.update(_INTEGRATOR_EXPOSED_TOOL_NAMES)
         names.difference_update(_INTERNAL_WORKSPACE_TOOL_NAMES)
@@ -1914,11 +2003,40 @@ class AgnoAsyncEngine:
 
     def _build_request(self, *, profile: ModelProfile | None = None, extra_tools: list[ToolSpec] | None = None) -> CanonicalRequest:
         tools: list[ToolSpec] = []
+        capability_surface = None
         if self.tools_enabled and self.tool_registry is not None:
             exposed = self._exposed_tool_names_for_session()
             tools = [t for t in self.tool_registry.list_specs() if t.name in exposed]
+            if self.capability_builder is not None:
+                role = (self._current_workspace_role() or ROLE_WORKER).strip().lower()
+                agent_id = self._current_agent_id()
+                try:
+                    capability_surface = self.capability_builder.build(agent_id=agent_id, role=role)
+                except Exception:
+                    capability_surface = None
+                else:
+                    by_name: dict[str, ToolSpec] = {item.name: item for item in tools}
+                    for spec_item in capability_surface.tool_specs:
+                        by_name.setdefault(spec_item.name, spec_item)
+                    ordered: list[ToolSpec] = []
+                    seen: set[str] = set()
+                    for tool_name in capability_surface.tool_allowlist:
+                        spec_item = by_name.get(tool_name)
+                        if spec_item is None or spec_item.name in seen:
+                            continue
+                        ordered.append(spec_item)
+                        seen.add(spec_item.name)
+                    for spec_item in by_name.values():
+                        if spec_item.name in seen:
+                            continue
+                        ordered.append(spec_item)
+                        seen.add(spec_item.name)
+                    tools = ordered
         if extra_tools:
-            tools = [*tools, *list(extra_tools)]
+            by_name = {item.name: item for item in tools}
+            for item in list(extra_tools):
+                by_name[item.name] = item
+            tools = list(by_name.values())
         if profile is not None and tools:
             try:
                 tools = self._adapt_tool_specs_for_profile(tools=tools, profile=profile)
@@ -1929,16 +2047,38 @@ class AgnoAsyncEngine:
         state = self.spec_state_store.get()
         spec_summary = SpecStatusSummary(status=state.status, label=state.label)
 
-        surface = build_agent_surface(tools=tools, skills=skills, spec=spec_summary)
+        surface_text = build_agent_surface(tools=tools, skills=skills, spec=spec_summary)
 
         base_system = self.system_prompt or _load_default_system_prompt()
         parts = [base_system]
         if isinstance(self.memory_summary, str) and self.memory_summary.strip():
             parts.append("Session memory summary:\n\n" + self.memory_summary.strip())
-        workspace_block = self._workspace_system_prompt_block()
-        if isinstance(workspace_block, str) and workspace_block.strip():
-            parts.append(workspace_block.strip())
-        parts.append(surface)
+
+        if (
+            capability_surface is not None
+            and capability_surface.resolved_from == "agent_spec"
+            and self.context_builder is not None
+        ):
+            try:
+                built_context = self.context_builder.build(
+                    surface=capability_surface,
+                    sandbox=self._current_sandbox(),
+                    signal=None,
+                )
+            except Exception:
+                built_context = None
+            if built_context is not None and built_context.system_prompt.strip():
+                parts.append(built_context.system_prompt.strip())
+            else:
+                workspace_block = self._workspace_system_prompt_block()
+                if isinstance(workspace_block, str) and workspace_block.strip():
+                    parts.append(workspace_block.strip())
+                parts.append(surface_text)
+        else:
+            workspace_block = self._workspace_system_prompt_block()
+            if isinstance(workspace_block, str) and workspace_block.strip():
+                parts.append(workspace_block.strip())
+            parts.append(surface_text)
         system = "\n\n".join(parts)
         return CanonicalRequest(system=system, messages=list(self._history or []), tools=tools)
 
@@ -2185,7 +2325,95 @@ class AgnoAsyncEngine:
             error_message=f"Unknown tool: {planned.tool_name}",
         )
 
+    def _resolve_runtime_actor_context(self) -> dict[str, str | None]:
+        agent_id = self._current_agent_id()
+        sandbox_id: str | None = None
+        issue_key: str | None = None
+        role = self._current_workspace_role()
+        worktree_path: str | None = None
+        workspace_id: str | None = None
+        workbench_id: str | None = None
+        workspace_role: str | None = None
+
+        try:
+            binding = self._session_workspace_binding()
+            if binding is not None:
+                workspace_id = binding.workspace_id
+                workbench_id = binding.workbench_id
+                sandbox_id = binding.workbench_id
+                if binding.role is not None:
+                    workspace_role = binding.role.value
+                    role = role or binding.role.value
+            resolved = self.workspace_manager.resolve_context(session_id=self.session_id)
+        except Exception:
+            resolved = None
+        if resolved is not None:
+            try:
+                ws = resolved.workspace
+                wb = resolved.workbench
+                issue_key = str(getattr(getattr(ws, "issue_ref", None), "key", "") or "").strip() or issue_key
+                worktree_path = str(getattr(wb, "worktree_path", "") or "").strip() or worktree_path
+                sandbox_id = str(getattr(wb, "workbench_id", "") or "").strip() or sandbox_id
+                if workspace_role is None and getattr(wb, "role", None) is not None:
+                    workspace_role = wb.role.value
+                if role is None and workspace_role is not None:
+                    role = workspace_role
+            except Exception:
+                pass
+
+        return {
+            "agent_id": agent_id,
+            "sandbox_id": sandbox_id,
+            "issue_key": issue_key,
+            "role": role,
+            "worktree_path": worktree_path,
+            "workspace_id": workspace_id,
+            "workbench_id": workbench_id,
+            "workspace_role": workspace_role,
+        }
+
+    def _record_tool_audit_event(
+        self,
+        *,
+        planned: PlannedToolCall,
+        duration_ms: int,
+        ok: bool,
+        result_payload: Any,
+        actor: dict[str, str | None] | None = None,
+    ) -> None:
+        if self.event_log is None:
+            return
+        actor_ctx = actor or self._resolve_runtime_actor_context()
+        agent_id = str(actor_ctx.get("agent_id") or "").strip() or self.session_id
+        sandbox_id = actor_ctx.get("sandbox_id")
+        issue_key = actor_ctx.get("issue_key")
+        refs = extract_external_refs(
+            tool_name=planned.tool_name,
+            tool_args=dict(planned.arguments),
+            tool_result=result_payload,
+        )
+        event = LogEvent(
+            event_id=new_id("evt"),
+            timestamp=now_ts_ms(),
+            session_id=self.session_id,
+            agent_id=agent_id,
+            sandbox_id=sandbox_id,
+            issue_key=issue_key,
+            kind=LogEventKind.TOOL_CALL,
+            tool_name=planned.tool_name,
+            tool_args_summary=summarize_tool_args(planned.tool_name, dict(planned.arguments)),
+            tool_result_summary=summarize_tool_result(planned.tool_name, result_payload),
+            tool_ok=ok,
+            duration_ms=max(0, int(duration_ms)),
+            external_refs=refs,
+        )
+        try:
+            self.event_log.record(event)
+        except Exception:
+            return
+
     async def _execute_mcp_tool(self, *, planned: PlannedToolCall, fn: Any, request_id: str, turn_id: str | None) -> str:
+        actor_ctx = self._resolve_runtime_actor_context()
         await self._emit(
             kind=EventKind.TOOL_CALL_START,
             payload={
@@ -2233,13 +2461,14 @@ class AgnoAsyncEngine:
         except Exception as e:
             duration_ms = int((time.monotonic() - started) * 1000)
             code = _classify_tool_exception(e)
+            result_payload = {"ok": False, "tool": planned.tool_name, "error_code": code.value, "error": str(e), "result": None}
             output_ref = self.artifact_store.put(
-                json.dumps({"ok": False, "tool": planned.tool_name, "error_code": code.value, "error": str(e)}, ensure_ascii=False, sort_keys=True, indent=2),
+                json.dumps(result_payload, ensure_ascii=False, sort_keys=True, indent=2),
                 kind="tool_output",
                 meta={"summary": f"{planned.tool_name} output (error)"},
             )
             tool_message = json.dumps(
-                {"ok": False, "tool": planned.tool_name, "output_ref": output_ref.to_dict(), "error_code": code.value, "error": str(e), "result": None},
+                {**result_payload, "output_ref": output_ref.to_dict()},
                 ensure_ascii=False,
             )
             tool_message_ref = self.artifact_store.put(tool_message, kind="tool_message", meta={"summary": f"{planned.tool_name} tool_result (error)"})
@@ -2262,15 +2491,23 @@ class AgnoAsyncEngine:
                 turn_id=turn_id,
                 step_id=planned.tool_execution_id,
             )
+            self._record_tool_audit_event(
+                planned=planned,
+                duration_ms=duration_ms,
+                ok=False,
+                result_payload=result_payload,
+                actor=actor_ctx,
+            )
             return tool_message
 
         duration_ms = int((time.monotonic() - started) * 1000)
+        result_payload = {"ok": True, "tool": planned.tool_name, "result": raw}
         output_ref = self.artifact_store.put(
             json.dumps(raw, ensure_ascii=False, sort_keys=True, indent=2),
             kind="tool_output",
             meta={"summary": f"{planned.tool_name} output"},
         )
-        tool_message = json.dumps({"ok": True, "tool": planned.tool_name, "output_ref": output_ref.to_dict(), "result": raw}, ensure_ascii=False)
+        tool_message = json.dumps({**result_payload, "output_ref": output_ref.to_dict()}, ensure_ascii=False)
         tool_message_ref = self.artifact_store.put(tool_message, kind="tool_message", meta={"summary": f"{planned.tool_name} tool_result"})
         await self._emit(
             kind=EventKind.TOOL_CALL_END,
@@ -2290,6 +2527,13 @@ class AgnoAsyncEngine:
             request_id=request_id,
             turn_id=turn_id,
             step_id=planned.tool_execution_id,
+        )
+        self._record_tool_audit_event(
+            planned=planned,
+            duration_ms=duration_ms,
+            ok=True,
+            result_payload=result_payload,
+            actor=actor_ctx,
         )
         return tool_message
 
@@ -2533,27 +2777,7 @@ class AgnoAsyncEngine:
             step_id=planned.tool_execution_id,
         )
 
-        workspace_id: str | None = None
-        workbench_id: str | None = None
-        worktree_path: str | None = None
-        workspace_role: str | None = None
-        try:
-            binding = self.workspace_manager.get_session_binding(session_id=self.session_id)
-            if binding is not None:
-                workspace_id = binding.workspace_id
-                workbench_id = binding.workbench_id
-                if binding.role is not None:
-                    workspace_role = binding.role.value
-                try:
-                    wb = self.workspace_manager.store.get_workbench(binding.workbench_id)
-                except Exception:
-                    wb = None
-                if wb is not None:
-                    worktree_path = wb.worktree_path
-                    if workspace_role is None and wb.role is not None:
-                        workspace_role = wb.role.value
-        except Exception:
-            pass
+        actor_ctx = self._resolve_runtime_actor_context()
 
         ctx = ToolExecutionContext(
             session_id=self.session_id,
@@ -2561,10 +2785,14 @@ class AgnoAsyncEngine:
             turn_id=turn_id,
             tool_execution_id=planned.tool_execution_id,
             event_bus=self.event_bus,
-            workspace_id=workspace_id,
-            workbench_id=workbench_id,
-            worktree_path=worktree_path,
-            workspace_role=workspace_role,
+            agent_id=actor_ctx.get("agent_id"),
+            sandbox_id=actor_ctx.get("sandbox_id"),
+            issue_key=actor_ctx.get("issue_key"),
+            role=actor_ctx.get("role"),
+            workspace_id=actor_ctx.get("workspace_id"),
+            workbench_id=actor_ctx.get("workbench_id"),
+            worktree_path=actor_ctx.get("worktree_path"),
+            workspace_role=actor_ctx.get("workspace_role"),
             caller_kind=str(getattr(planned, "caller_kind", "llm") or "llm"),
         )
 
@@ -2592,13 +2820,14 @@ class AgnoAsyncEngine:
         except Exception as e:
             duration_ms = int((time.monotonic() - started) * 1000)
             code = _classify_tool_exception(e)
+            result_payload = {"ok": False, "tool": planned.tool_name, "error_code": code.value, "error": str(e), "result": None}
             output_ref = self.artifact_store.put(
-                json.dumps({"ok": False, "tool": planned.tool_name, "error_code": code.value, "error": str(e)}, ensure_ascii=False, sort_keys=True, indent=2),
+                json.dumps(result_payload, ensure_ascii=False, sort_keys=True, indent=2),
                 kind="tool_output",
                 meta={"summary": f"{planned.tool_name} output (error)"},
             )
             tool_message = json.dumps(
-                {"ok": False, "tool": planned.tool_name, "output_ref": output_ref.to_dict(), "error_code": code.value, "error": str(e), "result": None},
+                {**result_payload, "output_ref": output_ref.to_dict()},
                 ensure_ascii=False,
             )
             tool_message_ref = self.artifact_store.put(tool_message, kind="tool_message", meta={"summary": f"{planned.tool_name} tool_result (error)"})
@@ -2620,15 +2849,23 @@ class AgnoAsyncEngine:
                 turn_id=turn_id,
                 step_id=planned.tool_execution_id,
             )
+            self._record_tool_audit_event(
+                planned=planned,
+                duration_ms=duration_ms,
+                ok=False,
+                result_payload=result_payload,
+                actor=actor_ctx,
+            )
             return tool_message
 
         duration_ms = int((time.monotonic() - started) * 1000)
+        result_payload = {"ok": True, "tool": planned.tool_name, "result": raw}
         output_ref = self.artifact_store.put(
             json.dumps(raw, ensure_ascii=False, sort_keys=True, indent=2),
             kind="tool_output",
             meta={"summary": f"{planned.tool_name} output"},
         )
-        tool_message = json.dumps({"ok": True, "tool": planned.tool_name, "output_ref": output_ref.to_dict(), "result": raw}, ensure_ascii=False)
+        tool_message = json.dumps({**result_payload, "output_ref": output_ref.to_dict()}, ensure_ascii=False)
         tool_message_ref = self.artifact_store.put(tool_message, kind="tool_message", meta={"summary": f"{planned.tool_name} tool_result"})
 
         details = None
@@ -2658,6 +2895,13 @@ class AgnoAsyncEngine:
             request_id=request_id,
             turn_id=turn_id,
             step_id=planned.tool_execution_id,
+        )
+        self._record_tool_audit_event(
+            planned=planned,
+            duration_ms=duration_ms,
+            ok=True,
+            result_payload=result_payload,
+            actor=actor_ctx,
         )
 
         return tool_message

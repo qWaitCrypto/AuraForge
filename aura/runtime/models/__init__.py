@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from .agent_spec import AgentSpec
+from .capability import AgentCapabilitySurface, ROLE_INTEGRATOR, ROLE_WORKER
+from .context import AgentContext
 from .event_log import LogEvent, LogEventKind
 from .mcp_spec import McpServerSpec
 from .sandbox import Sandbox
@@ -27,6 +29,8 @@ from .workspec import WorkSpec
 
 __all__ = [
     "AgentSpec",
+    "AgentCapabilitySurface",
+    "AgentContext",
     "LogEvent",
     "LogEventKind",
     "IssueWorkspace",
@@ -40,6 +44,8 @@ __all__ = [
     "TaskResult",
     "TaskSpec",
     "ToolSpec",
+    "ROLE_INTEGRATOR",
+    "ROLE_WORKER",
     "Workbench",
     "WorkbenchRole",
     "WorkbenchState",

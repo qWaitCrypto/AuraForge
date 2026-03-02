@@ -5,6 +5,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, ClassVar
 
+from ..capability import CapabilityBuilder
+from ..context import ContextBuilder
 from ..ids import new_id
 from ..llm.router import ModelRouter
 from ..llm.types import ToolSpec as LlmToolSpec
@@ -12,6 +14,7 @@ from ..mcp.config import load_mcp_config
 from ..models import WorkSpec
 from ..models.workspace import WorkbenchRole
 from ..registry import SpecResolutionError, SpecResolver
+from ..sandbox import SandboxManager
 from ..stores import ArtifactStore
 from ..subagents.presets import get_preset, preset_input_schema
 from ..subagents.runner import run_subagent
@@ -27,6 +30,9 @@ class SubagentRunTool:
     tool_runtime: ToolRuntime
     artifact_store: ArtifactStore
     spec_resolver: SpecResolver | None = None
+    capability_builder: CapabilityBuilder | None = None
+    context_builder: ContextBuilder | None = None
+    sandbox_manager: SandboxManager | None = None
     workspace_manager: WorkspaceManager | None = None
 
     name: ClassVar[str] = "subagent__run"
@@ -197,6 +203,10 @@ class SubagentRunTool:
             turn_id=(context.turn_id if context is not None else None),
             tool_execution_id=planned.tool_execution_id,
             event_bus=(context.event_bus if context is not None else None),
+            agent_id=(context.agent_id if context is not None else None),
+            sandbox_id=(context.sandbox_id if context is not None else None),
+            issue_key=(context.issue_key if context is not None else None),
+            role=(context.role if context is not None else None),
             workspace_id=(context.workspace_id if context is not None else None),
             workbench_id=(context.workbench_id if context is not None else None),
             worktree_path=(context.worktree_path if context is not None else None),
@@ -457,6 +467,8 @@ class SubagentRunTool:
         bundle = None
         resolved_agent_id: str | None = None
         agent_card_text: str | None = None
+        capability_surface = None
+        capability_warnings: list[dict[str, Any]] = []
 
         agent_id_raw = str(args.get("agent_id") or "").strip()
         preset_name = str(args.get("preset") or "").strip()
@@ -495,6 +507,29 @@ class SubagentRunTool:
                     project_root=Path(project_root),
                     prompt_ref=prompt_ref,
                 )
+            if self.capability_builder is not None:
+                role_hint = (
+                    str(
+                        (context.role if context is not None and isinstance(context.role, str) else None)
+                        or (
+                            context.workspace_role
+                            if context is not None and isinstance(context.workspace_role, str)
+                            else WorkbenchRole.WORKER.value
+                        )
+                    )
+                    .strip()
+                    .lower()
+                    or WorkbenchRole.WORKER.value
+                )
+                try:
+                    capability_surface = self.capability_builder.build_from_bundle(bundle=bundle, role=role_hint)
+                except Exception as exc:
+                    capability_warnings.append(
+                        {
+                            "code": "capability_surface_build_failed",
+                            "message": str(exc),
+                        }
+                    )
 
         task = str(args.get("task") or "").strip()
         if not task:
@@ -503,7 +538,9 @@ class SubagentRunTool:
         allowlist = args.get("tool_allowlist")
         if allowlist is None:
             allowlist_patterns: list[str] = []
-            if bundle is not None:
+            if capability_surface is not None and capability_surface.tool_allowlist:
+                allowlist_patterns = list(capability_surface.tool_allowlist)
+            elif bundle is not None:
                 allowlist_patterns = bundle.runnable_tool_runtime_names()
                 if not allowlist_patterns:
                     allowlist_patterns = list(bundle.agent.execution.default_allowlist)
@@ -516,9 +553,12 @@ class SubagentRunTool:
 
         max_turns = args.get("max_turns")
         if max_turns is None:
-            max_turns_int = preset.limits.max_turns
-            if bundle is not None and bundle.agent.execution.default_max_turns is not None:
-                max_turns_int = int(bundle.agent.execution.default_max_turns)
+            if capability_surface is not None:
+                max_turns_int = int(capability_surface.max_turns)
+            else:
+                max_turns_int = preset.limits.max_turns
+                if bundle is not None and bundle.agent.execution.default_max_turns is not None:
+                    max_turns_int = int(bundle.agent.execution.default_max_turns)
         else:
             if isinstance(max_turns, bool) or not isinstance(max_turns, int) or max_turns < 1:
                 raise ValueError("Invalid 'max_turns' (expected integer >= 1).")
@@ -526,9 +566,12 @@ class SubagentRunTool:
 
         max_tool_calls = args.get("max_tool_calls")
         if max_tool_calls is None:
-            default_budget = preset.limits.max_tool_calls
-            if bundle is not None and bundle.agent.execution.default_max_tool_calls is not None:
-                default_budget = int(bundle.agent.execution.default_max_tool_calls)
+            if capability_surface is not None:
+                default_budget = int(capability_surface.max_tool_calls)
+            else:
+                default_budget = preset.limits.max_tool_calls
+                if bundle is not None and bundle.agent.execution.default_max_tool_calls is not None:
+                    default_budget = int(bundle.agent.execution.default_max_tool_calls)
             max_tool_calls_int = min(default_budget, default_max_tool_calls)
         else:
             if isinstance(max_tool_calls, bool) or not isinstance(max_tool_calls, int) or max_tool_calls < 1:
@@ -654,10 +697,21 @@ class SubagentRunTool:
                     workspace_role=resolved_context.workbench.role.value,
                 )
 
-        extra_tool_specs, external_tool_executors, mcp_warnings = self._build_external_mcp_tools(
-            bundle=bundle,
-            project_root=Path(project_root),
-        )
+        if capability_surface is not None:
+            extra_tool_specs = list(capability_surface.tool_specs)
+            external_tool_executors = dict(capability_surface.external_executors)
+            mcp_warnings: list[dict[str, Any]] = []
+            for item in capability_surface.warnings:
+                if not isinstance(item, str) or not item.strip():
+                    continue
+                mcp_warnings.append({"code": "capability_warning", "message": item.strip()})
+        else:
+            extra_tool_specs, external_tool_executors, mcp_warnings = self._build_external_mcp_tools(
+                bundle=bundle,
+                project_root=Path(project_root),
+            )
+        if capability_warnings:
+            mcp_warnings.extend(capability_warnings)
 
         out = run_subagent(
             agent_id=resolved_agent_id,

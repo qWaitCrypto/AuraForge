@@ -613,6 +613,14 @@ def run_subagent(
         "aura_subagent_preset": preset.name,
     }
     if exec_context is not None:
+        if isinstance(exec_context.agent_id, str) and exec_context.agent_id:
+            metadata["aura_agent_id"] = exec_context.agent_id
+        if isinstance(exec_context.sandbox_id, str) and exec_context.sandbox_id:
+            metadata["aura_sandbox_id"] = exec_context.sandbox_id
+        if isinstance(exec_context.issue_key, str) and exec_context.issue_key:
+            metadata["aura_issue_key"] = exec_context.issue_key
+        if isinstance(exec_context.role, str) and exec_context.role:
+            metadata["aura_role"] = exec_context.role
         if isinstance(exec_context.workspace_id, str) and exec_context.workspace_id:
             metadata["aura_workspace_id"] = exec_context.workspace_id
         if isinstance(exec_context.workbench_id, str) and exec_context.workbench_id:

@@ -54,6 +54,8 @@ class SignalSendTool:
             if isinstance(args.get("from_agent"), str) and str(args.get("from_agent")).strip()
             else None
         )
+        if from_agent is None and context is not None and isinstance(context.agent_id, str) and context.agent_id.strip():
+            from_agent = context.agent_id.strip()
         if from_agent is None and context is not None and isinstance(context.session_id, str) and context.session_id.strip():
             from_agent = context.session_id.strip()
         if from_agent is None:
@@ -97,6 +99,8 @@ class SignalPollTool:
             if isinstance(args.get("to_agent"), str) and str(args.get("to_agent")).strip()
             else None
         )
+        if to_agent is None and context is not None and isinstance(context.agent_id, str) and context.agent_id.strip():
+            to_agent = context.agent_id.strip()
         if to_agent is None and context is not None and isinstance(context.session_id, str) and context.session_id.strip():
             to_agent = context.session_id.strip()
         if to_agent is None:

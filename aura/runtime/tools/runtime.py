@@ -27,11 +27,7 @@ class ToolRuntimeError(RuntimeError):
     pass
 
 
-_INTERNAL_ONLY_TOOL_NAMES: set[str] = {
-    "workspace__create_or_get",
-    "workspace__provision_workbench",
-    "workspace__heartbeat_workbench",
-}
+_INTERNAL_ONLY_TOOL_NAMES: set[str] = set()
 
 
 def _elide_tail(s: str, max_chars: int) -> str:
@@ -297,6 +293,11 @@ class ToolExecutionContext:
     turn_id: str | None
     tool_execution_id: str
     event_bus: EventBus | None = None
+    agent_id: str | None = None
+    sandbox_id: str | None = None
+    issue_key: str | None = None
+    role: str | None = None
+    # Deprecated compatibility fields; to be removed in Phase 3.
     workspace_id: str | None = None
     workbench_id: str | None = None
     worktree_path: str | None = None
@@ -669,34 +670,6 @@ class ToolRuntime:
                 action_summary=f"Export session: {planned.arguments.get('session_id')}",
                 risk_level="high",
                 reason="Export writes files into the project; approval required in standard mode.",
-                error_code=None,
-                diff_ref=diff_ref,
-            )
-
-        if tool_name in {
-            "workspace__create_or_get",
-            "workspace__provision_workbench",
-            "workspace__publish_heartbeat",
-            "workspace__submit_claim",
-            "workspace__award_claim",
-            "workspace__wake_awarded_agent",
-            "workspace__register_submission",
-            "workspace__heartbeat_workbench",
-            "workspace__accept_submission",
-            "workspace__append_submission_evidence",
-            "workspace__advance_issue_state",
-            "workspace__transition_workbench_state",
-            "workspace__close_workbench",
-            "workspace__close_workspace",
-            "workspace__gc_workbench",
-            "workspace__recover_expired_workbenches",
-        }:
-            diff_ref = self._build_args_preview(planned, summary=f"Preview for {tool_name}")
-            return InspectionResult(
-                decision=InspectionDecision.REQUIRE_APPROVAL,
-                action_summary=f"Execute tool: {tool_name}",
-                risk_level="high",
-                reason="Workspace lifecycle tools mutate local state/worktrees and require approval in standard mode.",
                 error_code=None,
                 diff_ref=diff_ref,
             )
