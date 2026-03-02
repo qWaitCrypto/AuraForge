@@ -3,11 +3,6 @@ __pycache__/
 *.py[codz]
 *$py.class
 tests/
-!tests/
-tests/*
-!tests/test_capability_builder.py
-!tests/test_context_builder.py
-!tests/test_engine_adaptation.py
 # C extensions
 *.so
 dev/

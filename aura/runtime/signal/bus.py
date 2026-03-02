@@ -60,6 +60,7 @@ class SignalBus:
         return self.store.read_inbox(to_agent, unconsumed_only=unconsumed_only, limit=limit)
 
     def consume(self, signal_id: str) -> None:
+        signal = self.store.find_by_id(signal_id)
         self.store.mark_consumed(signal_id)
 
         if self.event_log is not None:
@@ -67,7 +68,9 @@ class SignalBus:
                 LogEvent(
                     event_id=new_id("evt"),
                     session_id=f"signal:{signal_id}",
-                    agent_id="signal-bus",
+                    agent_id=(signal.to_agent if signal is not None else "signal-bus"),
+                    sandbox_id=(signal.sandbox_id if signal is not None else None),
+                    issue_key=(signal.issue_key if signal is not None else None),
                     kind=LogEventKind.SIGNAL_RECEIVED,
                     tool_name="signal__poll",
                     tool_args_summary=f"signal_id={signal_id}",

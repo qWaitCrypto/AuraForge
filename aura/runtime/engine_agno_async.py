@@ -320,7 +320,10 @@ class AgnoAsyncEngine:
         self.spec_resolver = SpecResolver(registry=self.spec_registry)
         self.sandbox_manager = SandboxManager(project_root=self.project_root)
         self.event_log = EventLog(store=EventLogFileStore(project_root=self.project_root))
-        self.signal_bus = SignalBus(store=SignalStore(project_root=self.project_root))
+        self.signal_bus = SignalBus(
+            store=SignalStore(project_root=self.project_root),
+            event_log=self.event_log,
+        )
         self.workspace_manager = WorkspaceManager(project_root=self.project_root)
 
         if self.max_tool_turns < 1:
@@ -1877,6 +1880,15 @@ class AgnoAsyncEngine:
         binding = self._session_workspace_binding()
         if binding is not None and isinstance(binding.agent_id, str) and binding.agent_id.strip():
             return binding.agent_id.strip()
+        try:
+            meta = self.session_store.get_session(self.session_id)
+        except Exception:
+            meta = {}
+        if isinstance(meta, dict):
+            for key in ("agent_id", "agent", "agent_spec_id"):
+                value = meta.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
         return self.session_id
 
     def _current_sandbox(self) -> Sandbox | None:
@@ -2986,6 +2998,19 @@ class AgnoAsyncEngine:
             request_id=request_id,
             turn_id=turn_id,
             step_id=planned.tool_execution_id,
+        )
+        self._record_tool_audit_event(
+            planned=planned,
+            duration_ms=0,
+            ok=False,
+            result_payload={
+                "ok": False,
+                "tool": planned.tool_name,
+                "error_code": error_code,
+                "error": error_message,
+                "result": None,
+            },
+            actor=self._resolve_runtime_actor_context(),
         )
         return tool_message
 

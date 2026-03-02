@@ -24,6 +24,8 @@ class ContextBuilder:
     def __init__(self, *, project_root: Path, spec_resolver: SpecResolver | None = None) -> None:
         self._project_root = project_root.expanduser().resolve()
         self._resolver = spec_resolver
+        self._agent_card_max_chars = 2000
+        self._project_knowledge_max_chars = 4000
 
     def build(
         self,
@@ -106,11 +108,11 @@ class ContextBuilder:
         metadata = bundle.agent.metadata if isinstance(bundle.agent.metadata, dict) else {}
         prompt_ref = metadata.get("prompt_ref")
         if isinstance(prompt_ref, str) and prompt_ref.strip():
-            card_text = self._read_project_file(prompt_ref.strip(), max_chars=16_000)
+            card_text = self._read_project_file(prompt_ref.strip(), max_chars=self._agent_card_max_chars)
             if card_text:
                 lines.extend(["", "Agent Guidance:", card_text])
 
-        return "\n".join(lines).strip()
+        return self._truncate("\n".join(lines).strip(), self._agent_card_max_chars)
 
     def _build_role_policy_layer(self, *, role: str) -> str:
         normalized = str(role or "").strip().lower()
@@ -202,7 +204,7 @@ class ContextBuilder:
             text = candidate.read_text(encoding="utf-8", errors="replace").strip()
         except Exception:
             return ""
-        return text
+        return self._truncate(text, self._project_knowledge_max_chars)
 
     def _build_tool_surface_layer(self, *, surface: AgentCapabilitySurface) -> str:
         lines: list[str] = ["## Available Tools"]
@@ -262,6 +264,14 @@ class ContextBuilder:
             return template.format_map(_SafeDict(vars)).strip()
         except Exception:
             return template.strip()
+
+    @staticmethod
+    def _truncate(text: str, max_chars: int) -> str:
+        if max_chars <= 0:
+            return ""
+        if len(text) <= max_chars:
+            return text
+        return text[:max_chars]
 
     def _read_project_file(self, rel_path: str, *, max_chars: int) -> str | None:
         rel = str(rel_path or "").strip()

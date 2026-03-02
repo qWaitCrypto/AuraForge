@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
+from ..ids import new_id
 from ..llm.types import ToolSpec as LlmToolSpec
+from ..mcp.config import load_mcp_config
 from ..models.capability import AgentCapabilitySurface, ROLE_INTEGRATOR, ROLE_WORKER
 from ..registry import ResolvedAgentBundle, SpecResolutionError, SpecResolver
 from ..tools.registry import ToolRegistry
@@ -38,6 +41,24 @@ WORKER_TOOLS: list[str] = [
     "snapshot__diff",
     "snapshot__list",
     "snapshot__read_text",
+]
+
+INTEGRATOR_TOOLS: list[str] = [
+    "session__export",
+    "spec__propose",
+    "spec__apply",
+    "spec__seal",
+    "workspace__publish_heartbeat",
+    "workspace__award_claim",
+    "workspace__wake_awarded_agent",
+    "workspace__accept_submission",
+    "workspace__append_submission_evidence",
+    "workspace__advance_issue_state",
+    "workspace__transition_workbench_state",
+    "workspace__close_workbench",
+    "workspace__close_workspace",
+    "workspace__gc_workbench",
+    "workspace__recover_expired_workbenches",
 ]
 
 
@@ -177,8 +198,8 @@ class CapabilityBuilder:
         for item in WORKER_TOOLS:
             _add(item)
         if normalized_role == ROLE_INTEGRATOR:
-            # Integrator currently shares worker surface; runtime enforces privileged actions.
-            pass
+            for item in INTEGRATOR_TOOLS:
+                _add(item)
         for item in agent_tools:
             _add(item)
         for item in extra_tools or []:
@@ -203,25 +224,165 @@ class CapabilityBuilder:
         bundle: ResolvedAgentBundle,
     ) -> tuple[list[LlmToolSpec], dict[str, object], list[str]]:
         try:
-            from ..tools.subagent_runner import SubagentRunTool
-
-            extra_specs, executors, warning_rows = SubagentRunTool._build_external_mcp_tools(
-                bundle=bundle,
-                project_root=self._project_root,
-            )
-            warnings: list[str] = []
-            for item in warning_rows:
-                if isinstance(item, dict):
-                    code = str(item.get("code") or "").strip()
-                    message = str(item.get("message") or "").strip()
-                    tool_name = str(item.get("tool") or "").strip()
-                    details = ":".join(part for part in [code, tool_name, message] if part)
-                    warnings.append(details or str(item))
-                else:
-                    warnings.append(str(item))
-            return list(extra_specs), dict(executors), warnings
+            mcp_cfg = load_mcp_config(project_root=self._project_root)
         except Exception as exc:
-            return [], {}, [f"mcp_executor_build_failed:{exc}"]
+            return [], {}, [f"mcp_config_load_failed:{exc}"]
+        servers_by_id: dict[str, Any] = {}
+        for server in list(getattr(bundle, "mcp_servers", []) or []):
+            sid = str(getattr(server, "id", "") or "").strip()
+            if sid:
+                servers_by_id[sid] = server
+
+        extra_specs: list[LlmToolSpec] = []
+        executors: dict[str, object] = {}
+        warnings: list[str] = []
+        seen_names: set[str] = set()
+
+        for tool in list(getattr(bundle, "tools", []) or []):
+            entrypoint = getattr(tool, "entrypoint", None)
+            entry_type = str(getattr(getattr(entrypoint, "type", None), "value", getattr(entrypoint, "type", "")) or "")
+            if entry_type.strip().lower() != "mcp":
+                continue
+
+            runtime_name = str(getattr(tool, "runtime_name", "") or "").strip()
+            if not runtime_name or runtime_name in seen_names:
+                continue
+
+            binding = getattr(tool, "mcp_binding", None)
+            server_id = str(getattr(binding, "server_id", "") or "").strip()
+            remote_name = str(getattr(binding, "remote_tool", "") or "").strip()
+            if not server_id or not remote_name:
+                warnings.append(f"mcp_binding_missing:{runtime_name}")
+                continue
+
+            server_spec = servers_by_id.get(server_id)
+            server_name = str(getattr(server_spec, "name", "") or "").strip()
+            if not server_name:
+                warnings.append(f"mcp_server_missing:{runtime_name}:{server_id}")
+                continue
+
+            cfg_server = mcp_cfg.servers.get(server_name)
+            if cfg_server is None or not bool(cfg_server.enabled) or not str(cfg_server.command or "").strip():
+                warnings.append(f"mcp_server_not_configured:{runtime_name}:{server_name}")
+                continue
+
+            schema = getattr(tool, "params_schema", None)
+            if not isinstance(schema, dict):
+                schema = {"type": "object", "properties": {}}
+            description = str(getattr(tool, "description", "") or "").strip() or f"MCP tool {runtime_name}"
+            extra_specs.append(
+                LlmToolSpec(
+                    name=runtime_name,
+                    description=description,
+                    input_schema=schema,
+                )
+            )
+            executors[runtime_name] = self._make_mcp_stdio_executor(
+                server_name=server_name,
+                command=str(cfg_server.command or "").strip(),
+                args=list(cfg_server.args or []),
+                env=dict(cfg_server.env or {}),
+                cwd=cfg_server.cwd,
+                timeout_s=float(cfg_server.timeout_s),
+                runtime_name=runtime_name,
+                remote_name=remote_name,
+            )
+            seen_names.add(runtime_name)
+
+        return extra_specs, executors, warnings
+
+    @staticmethod
+    def _make_mcp_stdio_executor(
+        *,
+        server_name: str,
+        command: str,
+        args: list[str],
+        env: dict[str, str],
+        cwd: str | None,
+        timeout_s: float,
+        runtime_name: str,
+        remote_name: str,
+    ):
+        def _execute(call_args: dict[str, Any]) -> Any:
+            try:
+                from agno.tools.mcp.mcp import MCPTools
+                from mcp import StdioServerParameters
+                from mcp.client.stdio import get_default_environment
+            except Exception as e:  # pragma: no cover - optional dependency
+                raise RuntimeError(f"MCP tooling unavailable: {e}") from e
+
+            async def _run_once() -> Any:
+                prefix = f"mcp__{server_name}__"
+                server_params = StdioServerParameters(
+                    command=command,
+                    args=list(args or []),
+                    env={**get_default_environment(), **dict(env or {})},
+                    cwd=cwd,
+                )
+                toolkit = MCPTools(
+                    server_params=server_params,
+                    transport="stdio",
+                    timeout_seconds=int(max(1.0, float(timeout_s))),
+                    tool_name_prefix=prefix,
+                )
+                async with toolkit as entered:
+                    async_functions = entered.get_async_functions()
+                    target = async_functions.get(runtime_name)
+                    normalized_runtime = runtime_name.replace("___", "__")
+                    if target is None:
+                        for k, fn in async_functions.items():
+                            fn_name = str(getattr(fn, "name", k) or k)
+                            if (
+                                fn_name == runtime_name
+                                or fn_name.replace("___", "__") == normalized_runtime
+                                or str(k) == runtime_name
+                                or str(k).replace("___", "__") == normalized_runtime
+                                or fn_name == remote_name
+                                or str(k) == remote_name
+                            ):
+                                target = fn
+                                break
+                    if target is None:
+                        available = sorted(str(k) for k in async_functions.keys())
+                        raise RuntimeError(
+                            f"MCP tool not found for server={server_name!r}, runtime_name={runtime_name!r}, "
+                            f"remote_name={remote_name!r}, available={available[:20]!r}"
+                        )
+                    from agno.run import RunContext
+                    from agno.tools.function import FunctionCall
+                    from agno.tools.function import ToolResult as AgnoToolResult
+
+                    try:
+                        target._run_context = RunContext(
+                            run_id=f"mcp_{new_id('run')}",
+                            session_id=f"mcp_{new_id('session')}",
+                            metadata={},
+                        )
+                    except Exception:
+                        pass
+
+                    fc = FunctionCall(
+                        function=target,
+                        arguments=dict(call_args or {}),
+                        call_id=f"call_{new_id('mcp')}",
+                    )
+                    res = await fc.aexecute()
+                    if str(getattr(res, "status", "") or "") != "success":
+                        raise RuntimeError(str(getattr(res, "error", "") or "MCP tool execution failed"))
+                    raw = getattr(res, "result", None)
+                    if isinstance(raw, AgnoToolResult):
+                        out: dict[str, Any] = {"content": raw.content}
+                        if getattr(raw, "images", None):
+                            out["images"] = [
+                                img.to_dict() if hasattr(img, "to_dict") else img for img in list(raw.images or [])
+                            ]
+                        return out
+                    return raw
+
+            timeout = max(1.0, float(timeout_s))
+            return asyncio.run(asyncio.wait_for(_run_once(), timeout=timeout))
+
+        return _execute
 
     def _resolve_limits(self, *, bundle: ResolvedAgentBundle | None) -> tuple[int, int]:
         max_turns = 20

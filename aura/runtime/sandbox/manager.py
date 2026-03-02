@@ -4,7 +4,6 @@ import re
 import shutil
 import subprocess
 import uuid
-from dataclasses import dataclass
 from pathlib import Path
 
 from ..models.sandbox import Sandbox
@@ -25,11 +24,7 @@ class SandboxGitError(SandboxError):
     pass
 
 
-@dataclass(slots=True)
 class SandboxManager:
-    project_root: Path
-    store: SandboxStore
-
     def __init__(self, *, project_root: Path, store: SandboxStore | None = None) -> None:
         root = project_root.expanduser().resolve()
         self.project_root = root

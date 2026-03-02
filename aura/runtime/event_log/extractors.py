@@ -4,9 +4,10 @@ import json
 import re
 from typing import Any
 
-_COMMIT_RE = re.compile(r"\b[0-9a-fA-F]{7,40}\b")
 _GITHUB_PR_URL_RE = re.compile(r"https://github\.com/[^\s/]+/[^\s/]+/pull/\d+")
 _LINEAR_URL_RE = re.compile(r"https://linear\.app/[^\s\"')>]+")
+_GIT_COMMIT_BRACKET_RE = re.compile(r"\[[^\]]*\s([0-9a-fA-F]{7,40})\]")
+_GIT_COMMIT_PREFIX_RE = re.compile(r"\bcommit\s+([0-9a-fA-F]{7,40})\b", re.IGNORECASE)
 
 
 def _compact_text(value: Any, *, max_len: int) -> str:
@@ -117,7 +118,9 @@ def extract_external_refs(
                 _add("push:unknown")
 
         if "git commit" in command:
-            for sha in _COMMIT_RE.findall(payload_text):
+            for sha in _GIT_COMMIT_BRACKET_RE.findall(payload_text):
+                _add(f"commit:{sha.lower()}")
+            for sha in _GIT_COMMIT_PREFIX_RE.findall(payload_text):
                 _add(f"commit:{sha.lower()}")
 
     tool_name_l = tool_name.lower()
@@ -127,10 +130,6 @@ def extract_external_refs(
                 value = tool_result.get(key)
                 if isinstance(value, str) and value.strip():
                     _add(f"linear:{value.strip()}")
-
-    if "github" in tool_name_l or "gh" in tool_name_l:
-        for url in _GITHUB_PR_URL_RE.findall(payload_text):
-            _add(f"pr:{url}")
 
     for url in _GITHUB_PR_URL_RE.findall(payload_text):
         _add(f"pr:{url}")
