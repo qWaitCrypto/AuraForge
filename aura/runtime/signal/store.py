@@ -71,6 +71,16 @@ class SignalStore:
         index_obj[signal_id] = inbox_file_name
         self._write_index(index_obj)
 
+    def _remove_index(self, signal_id: str) -> None:
+        target = str(signal_id or "").strip()
+        if not target:
+            return
+        index_obj = self._load_index()
+        if target not in index_obj:
+            return
+        index_obj.pop(target, None)
+        self._write_index(index_obj)
+
     def _lookup_indexed_inbox(self, signal_id: str) -> Path | None:
         index_obj = self._load_index()
         file_name = index_obj.get(signal_id)
@@ -129,7 +139,7 @@ class SignalStore:
             out = out[:limit]
         return out
 
-    def mark_consumed(self, signal_id: str) -> None:
+    def mark_consumed(self, signal_id: str) -> Signal:
         target = str(signal_id or "").strip()
         if not target:
             raise ValueError("signal_id must be a non-empty string.")
@@ -161,7 +171,8 @@ class SignalStore:
             raise SignalStoreError(f"Signal not found: {target}")
 
         if not changed:
-            return
+            self._remove_index(target)
+            return matched
 
         tmp = path.with_suffix(path.suffix + ".tmp")
         with tmp.open("w", encoding="utf-8") as handle:
@@ -174,6 +185,8 @@ class SignalStore:
         archive_path.parent.mkdir(parents=True, exist_ok=True)
         with archive_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(matched.model_dump(mode="json"), ensure_ascii=False, sort_keys=True) + "\n")
+        self._remove_index(target)
+        return matched
 
     def find_by_id(self, signal_id: str) -> Signal | None:
         target = str(signal_id or "").strip()

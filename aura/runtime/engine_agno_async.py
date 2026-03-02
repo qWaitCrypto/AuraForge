@@ -590,6 +590,40 @@ class AgnoAsyncEngine:
         """
         return asyncio.run(self.arun(op, timeout_s=timeout_s, cancel=cancel))
 
+    async def execute_tool_once(
+        self,
+        *,
+        tool_name: str,
+        arguments: dict[str, Any],
+        caller_kind: str = "system",
+        request_id: str | None = None,
+        turn_id: str | None = None,
+    ) -> str:
+        """
+        Execute one runtime tool call through the same audited path used by normal runs.
+
+        This is primarily for diagnostics/acceptance checks that need a stable public API.
+        """
+        if self.tool_runtime is None:
+            raise RuntimeError("Tool runtime is not initialized.")
+        req_id = str(request_id or "").strip() or f"req_{new_id('req')}"
+        planned = self.tool_runtime.plan(
+            tool_execution_id=f"tool_{new_id('exec')}",
+            tool_call_id=f"call_{new_id('call')}",
+            tool_name=str(tool_name or "").strip(),
+            arguments=dict(arguments or {}),
+            caller_kind=str(caller_kind or "system"),
+        )
+        return await self._execute_tool(planned=planned, request_id=req_id, turn_id=turn_id)
+
+    async def list_mcp_runtime_tool_names(self, *, server_names: set[str] | None = None) -> list[str]:
+        """
+        Discover MCP runtime tool names via configured servers.
+        """
+        async with AsyncExitStack() as stack:
+            mcp_functions, _ = await self._load_mcp_tooling(stack=stack, server_names=server_names)
+        return sorted(mcp_functions.keys())
+
     async def continue_run(
         self,
         *,

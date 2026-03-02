@@ -7,7 +7,6 @@ import re
 import subprocess
 import sys
 import time
-from contextlib import AsyncExitStack
 from pathlib import Path
 from typing import Any
 
@@ -80,23 +79,20 @@ def _build_engine(root: Path, *, session_suffix: str):
 
 async def _check_engine_tool_audit(root: Path) -> dict[str, Any]:
     engine = _build_engine(root, session_suffix="audit")
-    planned = engine.tool_runtime.plan(  # type: ignore[union-attr]
-        tool_execution_id=f"tool_{new_id('exec')}",
-        tool_call_id=f"call_{new_id('call')}",
+    _ = await engine.execute_tool_once(
         tool_name="project__read_text",
         arguments={"path": "aura/runtime/models/sandbox.py"},
         caller_kind="system",
+        request_id=f"req_{new_id('req')}",
+        turn_id=f"turn_{new_id('turn')}",
     )
-    _ = await engine._execute_tool(planned=planned, request_id=f"req_{new_id('req')}", turn_id=f"turn_{new_id('turn')}")  # noqa: SLF001
     rows = engine.event_log.query(session_id=engine.session_id, tool_name="project__read_text", limit=50)
     return {"session_id": engine.session_id, "audit_rows": len(rows)}
 
 
 async def _check_linear_mcp_discovery(root: Path) -> dict[str, Any]:
     engine = _build_engine(root, session_suffix="mcp")
-    async with AsyncExitStack() as stack:
-        mcp_functions, _ = await engine._load_mcp_tooling(stack=stack, server_names={"linear"})  # noqa: SLF001
-    runtime_names = sorted(mcp_functions.keys())
+    runtime_names = await engine.list_mcp_runtime_tool_names(server_names={"linear"})
     linear_tools = [name for name in runtime_names if re.match(r"^mcp__linear_[0-9a-f]{6}__", name)]
     return {
         "mcp_tools_total": len(runtime_names),

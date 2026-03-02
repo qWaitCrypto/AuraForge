@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.resources
 import json
+import warnings
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -34,6 +35,7 @@ class SubagentPreset:
 
 
 def _load_presets() -> dict[str, SubagentPreset]:
+    source = "aura/runtime/subagents/presets.json"
     try:
         raw = (
             importlib.resources.files("aura.runtime")
@@ -41,10 +43,12 @@ def _load_presets() -> dict[str, SubagentPreset]:
             .read_text(encoding="utf-8", errors="replace")
         )
         payload = json.loads(raw)
-    except Exception:
+    except Exception as exc:
+        warnings.warn(f"Failed to load {source}: {exc}", RuntimeWarning, stacklevel=2)
         return {}
 
     if not isinstance(payload, list):
+        warnings.warn(f"Invalid preset payload in {source}: root must be a JSON array", RuntimeWarning, stacklevel=2)
         return {}
 
     out: dict[str, SubagentPreset] = {}
@@ -93,6 +97,8 @@ def _load_presets() -> dict[str, SubagentPreset]:
             auto_approve_tools=auto_approve_tools,
         )
 
+    if not out:
+        warnings.warn(f"No valid presets loaded from {source}", RuntimeWarning, stacklevel=2)
     return out
 
 
