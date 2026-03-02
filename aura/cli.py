@@ -351,6 +351,29 @@ def _build_parser() -> argparse.ArgumentParser:
     session_resume_parser.set_defaults(enable_tools=None)
     session_resume_parser.set_defaults(func=_cmd_session_resume)
 
+    sandbox_parser = subparsers.add_parser("sandbox", help="Manage isolated agent sandboxes.")
+    sandbox_subparsers = sandbox_parser.add_subparsers(dest="sandbox_cmd", required=True)
+
+    sandbox_create_parser = sandbox_subparsers.add_parser("create", help="Create one sandbox (git worktree + branch).")
+    sandbox_create_parser.add_argument("--agent-id", dest="agent_id", required=True, help="Agent id.")
+    sandbox_create_parser.add_argument("--issue-key", dest="issue_key", required=True, help="Issue key (e.g. ABC-123).")
+    sandbox_create_parser.add_argument("--base-branch", dest="base_branch", default="main", help="Base branch (default: main).")
+    sandbox_create_parser.add_argument("--sandbox-id", dest="sandbox_id", default=None, help="Optional sandbox id.")
+    sandbox_create_parser.set_defaults(func=_cmd_sandbox_create)
+
+    sandbox_list_parser = sandbox_subparsers.add_parser("list", help="List active sandboxes.")
+    sandbox_list_parser.add_argument("--agent-id", dest="agent_id", default=None, help="Optional agent filter.")
+    sandbox_list_parser.add_argument("--issue-key", dest="issue_key", default=None, help="Optional issue filter.")
+    sandbox_list_parser.set_defaults(func=_cmd_sandbox_list)
+
+    sandbox_info_parser = sandbox_subparsers.add_parser("info", help="Show one sandbox.")
+    sandbox_info_parser.add_argument("sandbox_id", help="Sandbox id (e.g. sb_ABC-123_python-pro_a3f).")
+    sandbox_info_parser.set_defaults(func=_cmd_sandbox_info)
+
+    sandbox_destroy_parser = sandbox_subparsers.add_parser("destroy", help="Destroy one sandbox.")
+    sandbox_destroy_parser.add_argument("sandbox_id", help="Sandbox id.")
+    sandbox_destroy_parser.set_defaults(func=_cmd_sandbox_destroy)
+
     workspace_parser = subparsers.add_parser("workspace", help="Inspect workspace runtime state.")
     workspace_subparsers = workspace_parser.add_subparsers(dest="workspace_cmd", required=True)
 
@@ -1762,6 +1785,111 @@ def _cmd_session_resume(args: argparse.Namespace) -> int:
     return _cmd_chat(args2)
 
 
+def _cmd_sandbox_create(args: argparse.Namespace) -> int:
+    from .runtime.project import RuntimePaths
+    from .runtime.sandbox import SandboxManager
+
+    try:
+        paths = RuntimePaths.discover()
+    except FileNotFoundError as e:
+        print(str(e), file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+
+    manager = SandboxManager(project_root=paths.project_root)
+    try:
+        sandbox = manager.create(
+            agent_id=str(getattr(args, "agent_id", "") or "").strip(),
+            issue_key=str(getattr(args, "issue_key", "") or "").strip(),
+            base_branch=str(getattr(args, "base_branch", "main") or "main").strip() or "main",
+            sandbox_id=(str(getattr(args, "sandbox_id", "")).strip() or None),
+        )
+    except Exception as e:
+        print(str(e), file=sys.stderr)
+        return EXIT_ERROR
+
+    print(json.dumps({"ok": True, "sandbox": sandbox.model_dump(mode="json")}, ensure_ascii=False, indent=2, sort_keys=True))
+    return EXIT_OK
+
+
+def _cmd_sandbox_list(args: argparse.Namespace) -> int:
+    from .runtime.project import RuntimePaths
+    from .runtime.sandbox import SandboxManager
+
+    try:
+        paths = RuntimePaths.discover()
+    except FileNotFoundError as e:
+        print(str(e), file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+
+    manager = SandboxManager(project_root=paths.project_root)
+    agent_id = str(getattr(args, "agent_id", "") or "").strip() or None
+    issue_key = str(getattr(args, "issue_key", "") or "").strip() or None
+
+    items = manager.list_active()
+    if agent_id is not None:
+        items = [item for item in items if item.agent_id == agent_id]
+    if issue_key is not None:
+        items = [item for item in items if item.issue_key == issue_key]
+
+    for item in items:
+        print(
+            f"{item.sandbox_id}\tagent={item.agent_id}\tissue={item.issue_key}\t"
+            f"branch={item.branch}\tcreated_at={item.created_at}"
+        )
+    return EXIT_OK
+
+
+def _cmd_sandbox_info(args: argparse.Namespace) -> int:
+    from .runtime.project import RuntimePaths
+    from .runtime.sandbox import SandboxManager
+
+    try:
+        paths = RuntimePaths.discover()
+    except FileNotFoundError as e:
+        print(str(e), file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+
+    sandbox_id = str(getattr(args, "sandbox_id", "") or "").strip()
+    if not sandbox_id:
+        print("sandbox_id is required.", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+
+    manager = SandboxManager(project_root=paths.project_root)
+    item = manager.get(sandbox_id)
+    if item is None:
+        print(f"Sandbox not found: {sandbox_id}", file=sys.stderr)
+        return EXIT_ERROR
+
+    print(json.dumps({"ok": True, "sandbox": item.model_dump(mode="json")}, ensure_ascii=False, indent=2, sort_keys=True))
+    return EXIT_OK
+
+
+def _cmd_sandbox_destroy(args: argparse.Namespace) -> int:
+    from .runtime.project import RuntimePaths
+    from .runtime.sandbox import SandboxManager
+
+    try:
+        paths = RuntimePaths.discover()
+    except FileNotFoundError as e:
+        print(str(e), file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+
+    sandbox_id = str(getattr(args, "sandbox_id", "") or "").strip()
+    if not sandbox_id:
+        print("sandbox_id is required.", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+
+    manager = SandboxManager(project_root=paths.project_root)
+    try:
+        manager.destroy(sandbox_id)
+    except Exception as e:
+        print(str(e), file=sys.stderr)
+        return EXIT_ERROR
+
+    print(json.dumps({"ok": True, "sandbox_id": sandbox_id}, ensure_ascii=False, indent=2, sort_keys=True))
+    return EXIT_OK
+
+
 def _cmd_workspace_create(args: argparse.Namespace) -> int:
     from .runtime.project import RuntimePaths
     from .runtime.models.workspace import WorkspaceIssueRef, WorkspaceRepoRef
@@ -2565,9 +2693,15 @@ def _cmd_init(args: argparse.Namespace) -> int:
         project_root / ".aura" / "skills",
         project_root / ".aura" / "sessions",
         project_root / ".aura" / "events",
+        project_root / ".aura" / "events" / "audit",
         project_root / ".aura" / "artifacts",
         project_root / ".aura" / "runs",
+        project_root / ".aura" / "sandboxes",
         project_root / ".aura" / "state",
+        project_root / ".aura" / "state" / "sandboxes",
+        project_root / ".aura" / "state" / "signals",
+        project_root / ".aura" / "state" / "signals" / "inbox",
+        project_root / ".aura" / "state" / "signals" / "archive",
         project_root / ".aura" / "state" / "workspaces",
         project_root / ".aura" / "state" / "workspaces" / "sessions",
         project_root / ".aura" / "state" / "workbenches",
