@@ -35,7 +35,7 @@ class SubagentPreset:
 _PRESETS: dict[str, SubagentPreset] = {
     "file_ops_worker": SubagentPreset(
         name="file_ops_worker",
-        prompt_asset="subagent_file_ops_worker.md",
+        prompt_asset="agent_file_ops_worker.md",
         default_allowlist=[
             "project__list_dir",
             "project__glob",
@@ -45,14 +45,13 @@ _PRESETS: dict[str, SubagentPreset] = {
             "shell__run",
             "snapshot__create",
             "snapshot__diff",
-            "workspace__context",
-            "workspace__register_submission",
+            "audit__query",
         ],
         limits=SubagentLimits(max_turns=12, max_tool_calls=24),
     ),
     "doc_worker": SubagentPreset(
         name="doc_worker",
-        prompt_asset="subagent_doc_worker.md",
+        prompt_asset="agent_doc_worker.md",
         default_allowlist=[
             # Skills (docx/pdf)
             "skill__list",
@@ -72,8 +71,7 @@ _PRESETS: dict[str, SubagentPreset] = {
 
             "snapshot__create",
             "snapshot__diff",
-            "workspace__context",
-            "workspace__register_submission",
+            "audit__query",
         ],
         limits=SubagentLimits(max_turns=12, max_tool_calls=24),
         # Auto-approve running the *skill runner* script (see subagents/runner.py safety checks).
@@ -84,7 +82,7 @@ _PRESETS: dict[str, SubagentPreset] = {
     ),
     "sheet_worker": SubagentPreset(
         name="sheet_worker",
-        prompt_asset="subagent_sheet_worker.md",
+        prompt_asset="agent_sheet_worker.md",
         default_allowlist=[
             # Skills (xlsx)
             "skill__list",
@@ -104,8 +102,7 @@ _PRESETS: dict[str, SubagentPreset] = {
 
             "snapshot__create",
             "snapshot__diff",
-            "workspace__context",
-            "workspace__register_submission",
+            "audit__query",
         ],
         limits=SubagentLimits(max_turns=12, max_tool_calls=24),
         # Auto-approve running the *skill runner* script (see subagents/runner.py safety checks).
@@ -115,14 +112,13 @@ _PRESETS: dict[str, SubagentPreset] = {
     ),
     "browser_worker": SubagentPreset(
         name="browser_worker",
-        prompt_asset="subagent_browser_worker.md",
+        prompt_asset="agent_browser_worker.md",
         default_allowlist=[
             "skill__list",
             "skill__load",
             "skill__read_file",
             "browser__run",
-            "workspace__context",
-            "workspace__register_submission",
+            "audit__query",
         ],
         limits=SubagentLimits(max_turns=20, max_tool_calls=50),
         safe_shell_prefixes=[],
@@ -131,7 +127,7 @@ _PRESETS: dict[str, SubagentPreset] = {
     ),
     "market_worker": SubagentPreset(
         name="market_worker",
-        prompt_asset="subagent_market_worker.md",
+        prompt_asset="agent_market_worker.md",
         default_allowlist=[
             # Project I/O and edits.
             "project__list_dir",
@@ -170,14 +166,11 @@ _PRESETS: dict[str, SubagentPreset] = {
             # Session context lookup.
             "session__search",
 
-            # Workspace collaboration.
-            "workspace__context",
-            "workspace__heartbeat_workbench",
-            "workspace__register_submission",
-            "workspace__append_submission_evidence",
-            "workspace__audit_chain",
-            "workspace__list_submissions",
-            "workspace__timeline",
+            # Signal/audit collaboration.
+            "signal__send",
+            "signal__poll",
+            "audit__query",
+            "audit__refs",
         ],
         limits=SubagentLimits(max_turns=20, max_tool_calls=60),
         safe_shell_prefixes=[],
@@ -185,7 +178,7 @@ _PRESETS: dict[str, SubagentPreset] = {
     ),
     "verifier": SubagentPreset(
         name="verifier",
-        prompt_asset="subagent_verifier.md",
+        prompt_asset="agent_verifier.md",
         default_allowlist=[
             "project__list_dir",
             "project__glob",
@@ -198,8 +191,7 @@ _PRESETS: dict[str, SubagentPreset] = {
             "snapshot__read_text",
             "snapshot__diff",
             "session__search",
-            "workspace__context",
-            "workspace__register_submission",
+            "audit__query",
         ],
         limits=SubagentLimits(max_turns=6, max_tool_calls=12),
     ),

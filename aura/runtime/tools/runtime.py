@@ -297,11 +297,7 @@ class ToolExecutionContext:
     sandbox_id: str | None = None
     issue_key: str | None = None
     role: str | None = None
-    # Deprecated compatibility fields; to be removed in Phase 3.
-    workspace_id: str | None = None
-    workbench_id: str | None = None
     worktree_path: str | None = None
-    workspace_role: str | None = None
     caller_kind: str | None = None
 
 

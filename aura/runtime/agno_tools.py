@@ -43,23 +43,6 @@ _STANDARD_CONFIRM_TOOL_NAMES: set[str] = {
     "spec__seal",
     # Rollback overwrites the working tree; always approval-gated.
     "snapshot__rollback",
-    # Workspace lifecycle/state mutation tools.
-    "workspace__create_or_get",
-    "workspace__provision_workbench",
-    "workspace__publish_heartbeat",
-    "workspace__submit_claim",
-    "workspace__award_claim",
-    "workspace__wake_awarded_agent",
-    "workspace__register_submission",
-    "workspace__heartbeat_workbench",
-    "workspace__accept_submission",
-    "workspace__append_submission_evidence",
-    "workspace__advance_issue_state",
-    "workspace__transition_workbench_state",
-    "workspace__close_workbench",
-    "workspace__close_workspace",
-    "workspace__gc_workbench",
-    "workspace__recover_expired_workbenches",
 }
 
 
@@ -464,10 +447,7 @@ def build_agno_toolset(
                     sandbox_id=(str(meta.get("aura_sandbox_id")).strip() if isinstance(meta.get("aura_sandbox_id"), str) else None),
                     issue_key=(str(meta.get("aura_issue_key")).strip() if isinstance(meta.get("aura_issue_key"), str) else None),
                     role=(str(meta.get("aura_role")).strip() if isinstance(meta.get("aura_role"), str) else None),
-                    workspace_id=(str(meta.get("aura_workspace_id")).strip() if isinstance(meta.get("aura_workspace_id"), str) else None),
-                    workbench_id=(str(meta.get("aura_workbench_id")).strip() if isinstance(meta.get("aura_workbench_id"), str) else None),
                     worktree_path=(str(meta.get("aura_worktree_path")).strip() if isinstance(meta.get("aura_worktree_path"), str) else None),
-                    workspace_role=(str(meta.get("aura_workspace_role")).strip() if isinstance(meta.get("aura_workspace_role"), str) else None),
                     caller_kind=str(getattr(planned, "caller_kind", "llm") or "llm"),
                 )
 

@@ -419,7 +419,10 @@ _WORKER_BLOCKED_SHELL_RULES: list[tuple[re.Pattern[str], str]] = [
 
 
 def _enforce_workspace_shell_policy(*, command: str, context: Any | None) -> None:
-    role_raw = getattr(context, "workspace_role", None)
+    role_raw = getattr(context, "role", None)
+    if not isinstance(role_raw, str) or not role_raw.strip():
+        # Backward compatibility for callers that still attach legacy field names.
+        role_raw = getattr(context, "workspace_role", None)
     if not isinstance(role_raw, str):
         return
     role = role_raw.strip().lower()
@@ -432,6 +435,6 @@ def _enforce_workspace_shell_policy(*, command: str, context: Any | None) -> Non
     for pattern, blocked_action in _WORKER_BLOCKED_SHELL_RULES:
         if pattern.search(normalized):
             raise PermissionError(
-                f"Workspace policy violation: role '{role}' cannot execute '{blocked_action}'. "
-                "Use an integrator workbench for push/PR operations."
+                f"Runtime policy violation: role '{role}' cannot execute '{blocked_action}'. "
+                "Use an integrator role session for push/PR operations."
             )

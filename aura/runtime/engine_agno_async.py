@@ -66,7 +66,6 @@ from .snapshots import GitSnapshotBackend
 from .spec_workflow import SpecProposalStore, SpecStateStore, SpecStore
 from .stores import ApprovalStore, ArtifactStore, EventLogStore, SessionStore
 from .mcp.config import load_mcp_config
-from .workspace import WorkspaceManager
 from .tools import (
     AuditQueryTool,
     AuditRefsTool,
@@ -102,30 +101,6 @@ from .tools import (
     SpecQueryTool,
     SpecSealTool,
     ToolRegistry,
-    WorkspaceAwardClaimTool,
-    WorkspaceAcceptSubmissionTool,
-    WorkspaceAuditChainTool,
-    WorkspaceAppendSubmissionEvidenceTool,
-    WorkspaceAdvanceIssueStateTool,
-    WorkspaceCloseWorkbenchTool,
-    WorkspaceCloseWorkspaceTool,
-    WorkspaceContextTool,
-    WorkspaceCreateOrGetTool,
-    WorkspaceGcWorkbenchTool,
-    WorkspaceHeartbeatWorkbenchTool,
-    WorkspaceListAwardsTool,
-    WorkspaceListClaimsTool,
-    WorkspaceListHeartbeatsTool,
-    WorkspaceListWorkbenchesTool,
-    WorkspaceListSubmissionsTool,
-    WorkspacePublishHeartbeatTool,
-    WorkspaceProvisionWorkbenchTool,
-    WorkspaceRecoverExpiredWorkbenchesTool,
-    WorkspaceRegisterSubmissionTool,
-    WorkspaceSubmitClaimTool,
-    WorkspaceTimelineTool,
-    WorkspaceTransitionWorkbenchStateTool,
-    WorkspaceWakeAwardedAgentTool,
 )
 from .tools.runtime import (
     InspectionResult,
@@ -216,42 +191,9 @@ _BASE_EXPOSED_TOOL_NAMES: set[str] = {
     "spec__seal",
     # Subagents
     "subagent__run",
-    # Workspace runtime surface (worker-safe by default)
-    "workspace__context",
-    "workspace__submit_claim",
-    "workspace__list_heartbeats",
-    "workspace__list_claims",
-    "workspace__list_awards",
-    "workspace__register_submission",
-    "workspace__audit_chain",
-    "workspace__list_submissions",
-    "workspace__list_workbenches",
-    "workspace__timeline",
 }
 
 _INTEGRATOR_EXPOSED_TOOL_NAMES: set[str] = {
-    "workspace__publish_heartbeat",
-    "workspace__award_claim",
-    "workspace__wake_awarded_agent",
-    "workspace__accept_submission",
-    "workspace__append_submission_evidence",
-    "workspace__advance_issue_state",
-    "workspace__transition_workbench_state",
-    "workspace__close_workbench",
-    "workspace__close_workspace",
-    "workspace__gc_workbench",
-    "workspace__recover_expired_workbenches",
-}
-
-# Not exposed to LLM tool lists; intended for executor/system orchestration paths only.
-_INTERNAL_WORKSPACE_TOOL_NAMES: set[str] = {
-    "workspace__create_or_get",
-    "workspace__provision_workbench",
-    "workspace__heartbeat_workbench",
-}
-
-# In a bound workbench session, keep the surface focused on delivery/runtime work.
-_WORKBENCH_HIDDEN_TOOL_NAMES: set[str] = {
     "session__export",
     "spec__propose",
     "spec__apply",
@@ -291,7 +233,6 @@ class AgnoAsyncEngine:
     signal_bus: SignalBus = field(init=False)
     capability_builder: CapabilityBuilder = field(init=False)
     context_builder: ContextBuilder = field(init=False)
-    workspace_manager: WorkspaceManager = field(init=False)
 
     _history: list[CanonicalMessage] | None = field(default=None, init=False)
     # Knowledge / RAG is implemented as an optional module and is not enabled by default.
@@ -324,7 +265,6 @@ class AgnoAsyncEngine:
             store=SignalStore(project_root=self.project_root),
             event_log=self.event_log,
         )
-        self.workspace_manager = WorkspaceManager(project_root=self.project_root)
 
         if self.max_tool_turns < 1:
             raise ValueError("max_tool_turns must be >= 1")
@@ -350,30 +290,6 @@ class AgnoAsyncEngine:
         registry.register(AuditRefsTool(event_log=self.event_log))
         registry.register(SignalSendTool(signal_bus=self.signal_bus))
         registry.register(SignalPollTool(signal_bus=self.signal_bus))
-        registry.register(WorkspaceCreateOrGetTool(self.workspace_manager))
-        registry.register(WorkspaceProvisionWorkbenchTool(self.workspace_manager))
-        registry.register(WorkspaceContextTool(self.workspace_manager))
-        registry.register(WorkspacePublishHeartbeatTool(self.workspace_manager))
-        registry.register(WorkspaceSubmitClaimTool(self.workspace_manager))
-        registry.register(WorkspaceAwardClaimTool(self.workspace_manager))
-        registry.register(WorkspaceWakeAwardedAgentTool(self.workspace_manager))
-        registry.register(WorkspaceRegisterSubmissionTool(self.workspace_manager))
-        registry.register(WorkspaceAuditChainTool(self.workspace_manager))
-        registry.register(WorkspaceHeartbeatWorkbenchTool(self.workspace_manager))
-        registry.register(WorkspaceListHeartbeatsTool(self.workspace_manager))
-        registry.register(WorkspaceListClaimsTool(self.workspace_manager))
-        registry.register(WorkspaceListAwardsTool(self.workspace_manager))
-        registry.register(WorkspaceAcceptSubmissionTool(self.workspace_manager))
-        registry.register(WorkspaceAppendSubmissionEvidenceTool(self.workspace_manager))
-        registry.register(WorkspaceAdvanceIssueStateTool(self.workspace_manager))
-        registry.register(WorkspaceTransitionWorkbenchStateTool(self.workspace_manager))
-        registry.register(WorkspaceCloseWorkbenchTool(self.workspace_manager))
-        registry.register(WorkspaceCloseWorkspaceTool(self.workspace_manager))
-        registry.register(WorkspaceGcWorkbenchTool(self.workspace_manager))
-        registry.register(WorkspaceListWorkbenchesTool(self.workspace_manager))
-        registry.register(WorkspaceListSubmissionsTool(self.workspace_manager))
-        registry.register(WorkspaceRecoverExpiredWorkbenchesTool(self.workspace_manager))
-        registry.register(WorkspaceTimelineTool(self.workspace_manager))
         registry.register(SkillListTool(self.skill_store))
         registry.register(SkillLoadTool(self.skill_store))
         registry.register(SkillReadFileTool(self.skill_store))
@@ -412,7 +328,6 @@ class AgnoAsyncEngine:
                 capability_builder=self.capability_builder,
                 context_builder=self.context_builder,
                 sandbox_manager=self.sandbox_manager,
-                workspace_manager=self.workspace_manager,
             )
             registry.register(subagent_tool)
         except Exception:
@@ -1856,72 +1771,62 @@ class AgnoAsyncEngine:
 
         return adapt_tool_specs_for_profile(tools=tools, profile=profile)
 
-    def _session_workspace_binding(self) -> Any | None:
+    def _session_metadata(self) -> dict[str, Any]:
         try:
-            return self.workspace_manager.get_session_binding(session_id=self.session_id)
+            raw = self.session_store.get_session(self.session_id)
         except Exception:
-            return None
+            return {}
+        return raw if isinstance(raw, dict) else {}
 
     def _current_workspace_role(self) -> str | None:
-        binding = self._session_workspace_binding()
-        if binding is None:
-            return None
-        if binding.role is not None:
-            return binding.role.value
-        try:
-            wb = self.workspace_manager.store.get_workbench(binding.workbench_id)
-        except Exception:
-            return None
-        if wb.role is not None:
-            return wb.role.value
+        meta = self._session_metadata()
+        for key in ("role", "workspace_role"):
+            value = meta.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip().lower()
         return None
 
     def _current_agent_id(self) -> str:
-        binding = self._session_workspace_binding()
-        if binding is not None and isinstance(binding.agent_id, str) and binding.agent_id.strip():
-            return binding.agent_id.strip()
-        try:
-            meta = self.session_store.get_session(self.session_id)
-        except Exception:
-            meta = {}
-        if isinstance(meta, dict):
-            for key in ("agent_id", "agent", "agent_spec_id"):
-                value = meta.get(key)
-                if isinstance(value, str) and value.strip():
-                    return value.strip()
+        meta = self._session_metadata()
+        for key in ("agent_id", "agent", "agent_spec_id"):
+            value = meta.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
         return self.session_id
 
     def _current_sandbox(self) -> Sandbox | None:
-        try:
-            resolved = self.workspace_manager.resolve_context(session_id=self.session_id)
-        except Exception:
-            return None
-        ws = getattr(resolved, "workspace", None)
-        wb = getattr(resolved, "workbench", None)
-        if ws is None or wb is None:
-            return None
-        issue_key = str(getattr(getattr(ws, "issue_ref", None), "key", "") or "").strip()
-        worktree_path = str(getattr(wb, "worktree_path", "") or "").strip()
-        branch = str(getattr(wb, "branch", "") or "").strip()
+        meta = self._session_metadata()
+        sandbox_id = str(meta.get("sandbox_id") or "").strip()
+        if sandbox_id:
+            try:
+                item = self.sandbox_manager.get(sandbox_id)
+            except Exception:
+                item = None
+            if item is not None:
+                return item
+
+        issue_key = str(meta.get("issue_key") or "").strip()
+        worktree_path = str(meta.get("worktree_path") or "").strip()
+        branch = str(meta.get("branch") or "").strip()
         if not issue_key or not worktree_path or not branch:
             return None
-        raw_workbench_id = str(getattr(wb, "workbench_id", "") or "").strip() or new_id("sb")
-        sandbox_id = raw_workbench_id if raw_workbench_id.startswith("sb_") else f"sb_{raw_workbench_id}"
+
+        sid = sandbox_id if sandbox_id else f"sb_{new_id('tmp')}"
         try:
             return Sandbox(
-                sandbox_id=sandbox_id,
+                sandbox_id=sid,
                 agent_id=self._current_agent_id(),
                 issue_key=issue_key,
                 worktree_path=worktree_path,
                 branch=branch,
-                base_branch=str(getattr(ws, "base_branch", "main") or "main"),
-                created_at=int(getattr(wb, "created_at", now_ts_ms()) or now_ts_ms()),
+                base_branch=str(meta.get("base_branch") or "main").strip() or "main",
+                created_at=int(meta.get("created_at") or now_ts_ms()),
             )
         except Exception:
             return None
 
     def _is_workbench_bound_session(self) -> bool:
-        return self._session_workspace_binding() is not None
+        return self._current_sandbox() is not None
 
     def _exposed_tool_names_for_session(self) -> set[str]:
         role = (self._current_workspace_role() or ROLE_WORKER).strip().lower()
@@ -1937,48 +1842,30 @@ class AgnoAsyncEngine:
                     names.update(_BASE_EXPOSED_TOOL_NAMES)
                     if role == "integrator":
                         names.update(_INTEGRATOR_EXPOSED_TOOL_NAMES)
-                names.difference_update(_INTERNAL_WORKSPACE_TOOL_NAMES)
-                if self._is_workbench_bound_session():
-                    names.difference_update(_WORKBENCH_HIDDEN_TOOL_NAMES)
                 return names
 
         names = set(_BASE_EXPOSED_TOOL_NAMES)
         if role == "integrator":
             names.update(_INTEGRATOR_EXPOSED_TOOL_NAMES)
-        names.difference_update(_INTERNAL_WORKSPACE_TOOL_NAMES)
-        if self._is_workbench_bound_session():
-            names.difference_update(_WORKBENCH_HIDDEN_TOOL_NAMES)
         return names
 
     def _workspace_system_prompt_block(self) -> str | None:
-        try:
-            resolved = self.workspace_manager.resolve_context(session_id=self.session_id)
-        except Exception:
+        sandbox = self._current_sandbox()
+        if sandbox is None:
             return None
-
-        ws = resolved.workspace
-        wb = resolved.workbench
-        issue_label = f"{ws.issue_ref.provider}:{ws.issue_ref.key} ({ws.issue_ref.id})"
-        repo_label = f"{ws.repo_ref.provider}:{ws.repo_ref.owner}/{ws.repo_ref.repo}"
         lines = [
-            "Workspace Context (authoritative)",
-            f"- workspace_id: {ws.workspace_id}",
-            f"- issue: {issue_label}",
-            f"- repo: {repo_label}",
-            f"- base_branch: {ws.base_branch}",
-            f"- staging_branch: {ws.staging_branch}",
-            f"- merge_policy: {ws.merge_policy.value}",
-            f"- push_policy: {ws.push_policy.value}",
-            f"- workbench_id: {wb.workbench_id}",
-            f"- role: {wb.role.value}",
-            f"- branch: {wb.branch}",
-            f"- worktree_path: {wb.worktree_path}",
+            "Sandbox Context (authoritative)",
+            f"- sandbox_id: {sandbox.sandbox_id}",
+            f"- agent_id: {sandbox.agent_id}",
+            f"- issue_key: {sandbox.issue_key}",
+            f"- base_branch: {sandbox.base_branch}",
+            f"- branch: {sandbox.branch}",
+            f"- worktree_path: {sandbox.worktree_path}",
             "",
-            "Workspace Rules",
+            "Runtime Rules",
             "- Operate only inside the bound worktree path unless explicitly approved.",
-            "- Use skills for Linear/GitHub external actions; workspace tools only record/audit evidence.",
-            "- Record delivery evidence with workspace__register_submission.",
-            "- Internal workspace tools are executor-only and not part of your callable surface.",
+            "- Use skills for Linear/GitHub external actions.",
+            "- EventLog captures evidence automatically (no workspace submission tools).",
         ]
         return "\n".join(lines)
 
@@ -1989,17 +1876,11 @@ class AgnoAsyncEngine:
         This is applied to the main agent runtime tool path so ordinary project tools cannot
         escape the session's bound workbench.
         """
-        try:
-            binding = self.workspace_manager.get_session_binding(session_id=self.session_id)
-        except Exception:
-            return None
-        if binding is None:
-            return None
-        try:
-            wb = self.workspace_manager.store.get_workbench(binding.workbench_id)
-        except Exception:
-            return None
-        root = str(getattr(wb, "worktree_path", "") or "").strip()
+        sandbox = self._current_sandbox()
+        root = str(getattr(sandbox, "worktree_path", "") or "").strip() if sandbox is not None else ""
+        if not root:
+            meta = self._session_metadata()
+            root = str(meta.get("worktree_path") or "").strip()
         if not root:
             return None
         try:
@@ -2339,39 +2220,21 @@ class AgnoAsyncEngine:
 
     def _resolve_runtime_actor_context(self) -> dict[str, str | None]:
         agent_id = self._current_agent_id()
+        role = self._current_workspace_role() or ROLE_WORKER
         sandbox_id: str | None = None
         issue_key: str | None = None
-        role = self._current_workspace_role()
         worktree_path: str | None = None
-        workspace_id: str | None = None
-        workbench_id: str | None = None
-        workspace_role: str | None = None
 
-        try:
-            binding = self._session_workspace_binding()
-            if binding is not None:
-                workspace_id = binding.workspace_id
-                workbench_id = binding.workbench_id
-                sandbox_id = binding.workbench_id
-                if binding.role is not None:
-                    workspace_role = binding.role.value
-                    role = role or binding.role.value
-            resolved = self.workspace_manager.resolve_context(session_id=self.session_id)
-        except Exception:
-            resolved = None
-        if resolved is not None:
-            try:
-                ws = resolved.workspace
-                wb = resolved.workbench
-                issue_key = str(getattr(getattr(ws, "issue_ref", None), "key", "") or "").strip() or issue_key
-                worktree_path = str(getattr(wb, "worktree_path", "") or "").strip() or worktree_path
-                sandbox_id = str(getattr(wb, "workbench_id", "") or "").strip() or sandbox_id
-                if workspace_role is None and getattr(wb, "role", None) is not None:
-                    workspace_role = wb.role.value
-                if role is None and workspace_role is not None:
-                    role = workspace_role
-            except Exception:
-                pass
+        sandbox = self._current_sandbox()
+        if sandbox is not None:
+            sandbox_id = sandbox.sandbox_id
+            issue_key = sandbox.issue_key
+            worktree_path = sandbox.worktree_path
+        else:
+            meta = self._session_metadata()
+            sandbox_id = str(meta.get("sandbox_id") or "").strip() or None
+            issue_key = str(meta.get("issue_key") or "").strip() or None
+            worktree_path = str(meta.get("worktree_path") or "").strip() or None
 
         return {
             "agent_id": agent_id,
@@ -2379,9 +2242,6 @@ class AgnoAsyncEngine:
             "issue_key": issue_key,
             "role": role,
             "worktree_path": worktree_path,
-            "workspace_id": workspace_id,
-            "workbench_id": workbench_id,
-            "workspace_role": workspace_role,
         }
 
     def _record_tool_audit_event(
@@ -2801,10 +2661,7 @@ class AgnoAsyncEngine:
             sandbox_id=actor_ctx.get("sandbox_id"),
             issue_key=actor_ctx.get("issue_key"),
             role=actor_ctx.get("role"),
-            workspace_id=actor_ctx.get("workspace_id"),
-            workbench_id=actor_ctx.get("workbench_id"),
             worktree_path=actor_ctx.get("worktree_path"),
-            workspace_role=actor_ctx.get("workspace_role"),
             caller_kind=str(getattr(planned, "caller_kind", "llm") or "llm"),
         )
 

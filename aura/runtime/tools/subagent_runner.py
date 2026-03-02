@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -12,15 +12,13 @@ from ..llm.router import ModelRouter
 from ..llm.types import ToolSpec as LlmToolSpec
 from ..mcp.config import load_mcp_config
 from ..models import WorkSpec
-from ..models.workspace import WorkbenchRole
 from ..registry import SpecResolutionError, SpecResolver
 from ..sandbox import SandboxManager
 from ..stores import ArtifactStore
 from ..subagents.presets import get_preset, preset_input_schema
 from ..subagents.runner import run_subagent
-from ..workspace import WorkspaceManager, WorkspaceManagerError
 from .registry import ToolRegistry
-from .runtime import InspectionDecision, ToolExecutionContext, ToolRuntime
+from .runtime import ToolExecutionContext, ToolRuntime
 
 
 @dataclass(slots=True)
@@ -33,7 +31,6 @@ class SubagentRunTool:
     capability_builder: CapabilityBuilder | None = None
     context_builder: ContextBuilder | None = None
     sandbox_manager: SandboxManager | None = None
-    workspace_manager: WorkspaceManager | None = None
 
     name: ClassVar[str] = "subagent__run"
     description: ClassVar[str] = (
@@ -142,21 +139,6 @@ class SubagentRunTool:
                 "required": ["goal", "expected_outputs", "resource_scope"],
                 "additionalProperties": True,
             },
-            "workspace": {
-                "type": "object",
-                "description": (
-                    "Optional workspace routing hints. If provided, the runner binds this subagent "
-                    "to a dedicated workbench and enforces WorkSpec workspace_roots accordingly."
-                ),
-                "properties": {
-                    "workspace_id": {"type": "string"},
-                    "workbench_id": {"type": "string"},
-                    "role": {"type": "string", "enum": ["worker", "integrator", "reviewer"]},
-                    "bind_session": {"type": "boolean"},
-                    "lease_seconds": {"type": "integer", "minimum": 1},
-                },
-                "additionalProperties": False,
-            },
             "tool_allowlist": {
                 "type": "array",
                 "items": {"type": "string"},
@@ -173,58 +155,6 @@ class SubagentRunTool:
         "required": ["task"],
         "additionalProperties": False,
     }
-
-    def _execute_internal_workspace_tool(
-        self,
-        *,
-        tool_name: str,
-        arguments: dict[str, Any],
-        context: ToolExecutionContext | None,
-    ) -> dict[str, Any]:
-        tool = self.tool_runtime.get_tool(tool_name)
-        if tool is None:
-            raise RuntimeError(f"Internal workspace tool not found: {tool_name}")
-
-        planned = self.tool_runtime.plan(
-            tool_execution_id=f"tool_{new_id('call')}",
-            tool_name=tool_name,
-            tool_call_id=new_id("call"),
-            arguments=dict(arguments),
-            caller_kind="system",
-        )
-        inspection = self.tool_runtime.inspect(planned)
-        if inspection.decision is not InspectionDecision.ALLOW:
-            reason = inspection.reason or inspection.action_summary or f"Internal tool denied: {tool_name}"
-            raise PermissionError(reason)
-
-        sys_ctx = ToolExecutionContext(
-            session_id=(context.session_id if context is not None else ""),
-            request_id=(context.request_id if context is not None else None),
-            turn_id=(context.turn_id if context is not None else None),
-            tool_execution_id=planned.tool_execution_id,
-            event_bus=(context.event_bus if context is not None else None),
-            agent_id=(context.agent_id if context is not None else None),
-            sandbox_id=(context.sandbox_id if context is not None else None),
-            issue_key=(context.issue_key if context is not None else None),
-            role=(context.role if context is not None else None),
-            workspace_id=(context.workspace_id if context is not None else None),
-            workbench_id=(context.workbench_id if context is not None else None),
-            worktree_path=(context.worktree_path if context is not None else None),
-            workspace_role=(context.workspace_role if context is not None else None),
-            caller_kind="system",
-        )
-
-        from inspect import Parameter, signature
-
-        params = signature(tool.execute).parameters
-        accepts_context = "context" in params or any(p.kind is Parameter.VAR_KEYWORD for p in params.values())
-        if accepts_context:
-            raw = tool.execute(args=planned.arguments, project_root=self.tool_runtime.project_root, context=sys_ctx)
-        else:
-            raw = tool.execute(args=planned.arguments, project_root=self.tool_runtime.project_root)
-        if not isinstance(raw, dict):
-            raise RuntimeError(f"Internal tool returned invalid payload: {tool_name}")
-        return raw
 
     @staticmethod
     def _load_agent_card_text(*, project_root: Path, prompt_ref: str | None, max_chars: int = 20000) -> str | None:
@@ -510,16 +440,11 @@ class SubagentRunTool:
             if self.capability_builder is not None:
                 role_hint = (
                     str(
-                        (context.role if context is not None and isinstance(context.role, str) else None)
-                        or (
-                            context.workspace_role
-                            if context is not None and isinstance(context.workspace_role, str)
-                            else WorkbenchRole.WORKER.value
-                        )
+                        (context.role if context is not None and isinstance(context.role, str) else None) or "worker"
                     )
                     .strip()
                     .lower()
-                    or WorkbenchRole.WORKER.value
+                    or "worker"
                 )
                 try:
                     capability_surface = self.capability_builder.build_from_bundle(bundle=bundle, role=role_hint)
@@ -588,83 +513,9 @@ class SubagentRunTool:
             except Exception as e:
                 raise ValueError(f"Invalid 'work_spec': {e}") from e
 
-        workspace_info: dict[str, Any] | None = None
         exec_ctx = context
-        resolved_context = None
-        if self.workspace_manager is not None:
-            ws_raw = args.get("workspace")
-            bind_session_default = True
-
-            if isinstance(ws_raw, dict):
-                ws_id = str(ws_raw.get("workspace_id") or "").strip() or None
-                wb_id = str(ws_raw.get("workbench_id") or "").strip() or None
-                bind_session = bool(ws_raw.get("bind_session", bind_session_default))
-                lease_seconds = int(ws_raw.get("lease_seconds") or 900)
-                role_raw = str(ws_raw.get("role") or WorkbenchRole.WORKER.value).strip()
-                try:
-                    role = WorkbenchRole(role_raw)
-                except ValueError as e:
-                    raise ValueError(f"Invalid workspace.role: {role_raw!r}") from e
-
-                caller_kind = str((context.caller_kind if context is not None else None) or "llm").strip().lower() or "llm"
-                caller_role = str((context.workspace_role if context is not None else None) or "").strip().lower()
-
-                if wb_id or ws_id:
-                    if wb_id:
-                        resolved_context = self.workspace_manager.resolve_context(
-                            workspace_id=ws_id,
-                            workbench_id=wb_id,
-                            session_id=(context.session_id if bind_session and context is not None else None),
-                        )
-                    elif ws_id and not wb_id:
-                        if caller_kind != "system" and caller_role != WorkbenchRole.INTEGRATOR.value:
-                            raise PermissionError(
-                                "Auto-provisioning a workspace workbench requires integrator/system caller context."
-                            )
-
-                        operator_role = (
-                            WorkbenchRole.INTEGRATOR.value if caller_kind == "system" else WorkbenchRole(caller_role).value
-                        )
-                        provision = self._execute_internal_workspace_tool(
-                            tool_name="workspace__provision_workbench",
-                            arguments={
-                                "workspace_id": ws_id,
-                                "agent_id": (resolved_agent_id or f"preset:{preset.name}"),
-                                "instance_id": (context.tool_execution_id if context is not None else new_id("inst")),
-                                "role": role.value,
-                                "bind_session": bind_session,
-                                "lease_seconds": lease_seconds,
-                                "operator_role": operator_role,
-                            },
-                            context=context,
-                        )
-                        wb_raw = provision.get("workbench")
-                        if not isinstance(wb_raw, dict):
-                            raise RuntimeError("workspace__provision_workbench returned invalid workbench payload.")
-                        wb_id_created = str(wb_raw.get("workbench_id") or "").strip()
-                        ws_id_created = str(wb_raw.get("workspace_id") or "").strip()
-                        if not wb_id_created or not ws_id_created:
-                            raise RuntimeError("workspace__provision_workbench missing workspace/workbench identifiers.")
-                        resolved_context = self.workspace_manager.resolve_context(
-                            workspace_id=ws_id_created,
-                            workbench_id=wb_id_created,
-                        )
-
-            if resolved_context is None and context is not None:
-                if context.workspace_id and context.workbench_id:
-                    try:
-                        resolved_context = self.workspace_manager.resolve_context(
-                            workspace_id=context.workspace_id,
-                            workbench_id=context.workbench_id,
-                            session_id=context.session_id or None,
-                        )
-                    except WorkspaceManagerError:
-                        resolved_context = None
-
         inferred_workspace_root: str | None = None
-        if resolved_context is not None:
-            inferred_workspace_root = resolved_context.workbench.worktree_path
-        elif context is not None and isinstance(context.worktree_path, str) and context.worktree_path.strip():
+        if context is not None and isinstance(context.worktree_path, str) and context.worktree_path.strip():
             inferred_workspace_root = context.worktree_path.strip()
 
         if work_spec is None:
@@ -672,29 +523,7 @@ class SubagentRunTool:
                 work_spec = self._build_minimal_work_spec(goal=task, workspace_root=inferred_workspace_root)
             else:
                 raise ValueError(
-                    "Missing required 'work_spec'. Provide work_spec or run in a bound workspace/workbench context."
-                )
-
-        if resolved_context is not None:
-            scope = work_spec.resource_scope.model_copy(
-                update={
-                    "workspace_roots": [resolved_context.workbench.worktree_path],
-                }
-            )
-            work_spec = work_spec.model_copy(update={"resource_scope": scope})
-            workspace_info = {
-                "workspace_id": resolved_context.workspace.workspace_id,
-                "workbench_id": resolved_context.workbench.workbench_id,
-                "worktree_path": resolved_context.workbench.worktree_path,
-                "workspace_role": resolved_context.workbench.role.value,
-            }
-            if context is not None:
-                exec_ctx = replace(
-                    context,
-                    workspace_id=resolved_context.workspace.workspace_id,
-                    workbench_id=resolved_context.workbench.workbench_id,
-                    worktree_path=resolved_context.workbench.worktree_path,
-                    workspace_role=resolved_context.workbench.role.value,
+                    "Missing required 'work_spec'. Provide work_spec or run with context.worktree_path."
                 )
 
         if capability_surface is not None:
@@ -736,6 +565,4 @@ class SubagentRunTool:
             merged = list(out.get("warnings") or [])
             merged.extend(mcp_warnings)
             out["warnings"] = merged
-        if workspace_info is not None and isinstance(out, dict):
-            out["workspace"] = workspace_info
         return out

@@ -48,17 +48,6 @@ INTEGRATOR_TOOLS: list[str] = [
     "spec__propose",
     "spec__apply",
     "spec__seal",
-    "workspace__publish_heartbeat",
-    "workspace__award_claim",
-    "workspace__wake_awarded_agent",
-    "workspace__accept_submission",
-    "workspace__append_submission_evidence",
-    "workspace__advance_issue_state",
-    "workspace__transition_workbench_state",
-    "workspace__close_workbench",
-    "workspace__close_workspace",
-    "workspace__gc_workbench",
-    "workspace__recover_expired_workbenches",
 ]
 
 

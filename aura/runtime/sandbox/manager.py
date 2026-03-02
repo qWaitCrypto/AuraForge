@@ -51,6 +51,9 @@ class SandboxManager:
     def _build_branch(self, *, issue_key: str, agent_id: str, suffix: str) -> str:
         return f"agent/{_slug(issue_key)}/{_slug(agent_id)}/{suffix}"
 
+    def _build_flat_branch(self, *, issue_key: str, agent_id: str, suffix: str) -> str:
+        return f"agent-{_slug(issue_key)}-{_slug(agent_id)}-{_slug(suffix)}"
+
     def create(
         self,
         *,
@@ -88,7 +91,11 @@ class SandboxManager:
                 return existing_for_pair
 
         suffix = sid.rsplit("_", 1)[-1] if "_" in sid else uuid.uuid4().hex[:4]
-        branch = self._build_branch(issue_key=issue, agent_id=agent, suffix=_slug(suffix))
+        branch_candidates = [
+            self._build_branch(issue_key=issue, agent_id=agent, suffix=_slug(suffix)),
+            self._build_flat_branch(issue_key=issue, agent_id=agent, suffix=_slug(suffix)),
+        ]
+        branch = branch_candidates[0]
 
         worktree_rel_path = Path(".aura") / "sandboxes" / sid
         worktree_abs_path = (self.project_root / worktree_rel_path).resolve()
@@ -99,15 +106,31 @@ class SandboxManager:
         if worktree_abs_path.exists() and any(worktree_abs_path.iterdir()):
             raise SandboxError(f"Sandbox worktree path already exists and is not empty: {worktree_abs_path}")
 
-        self._run_git(
-            "worktree",
-            "add",
-            str(worktree_abs_path),
-            "-b",
-            branch,
-            base,
-            check=True,
-        )
+        last_error: SandboxGitError | None = None
+        for candidate in branch_candidates:
+            try:
+                self._run_git(
+                    "worktree",
+                    "add",
+                    str(worktree_abs_path),
+                    "-b",
+                    candidate,
+                    base,
+                    check=True,
+                )
+                branch = candidate
+                last_error = None
+                break
+            except SandboxGitError as exc:
+                last_error = exc
+                # Some repos have an existing `agent` branch ref file, which blocks nested refs
+                # such as `agent/...`. Retry with a flat fallback branch name.
+                if "cannot lock ref 'refs/heads/agent/" in str(exc):
+                    continue
+                raise
+
+        if last_error is not None:
+            raise last_error
 
         sandbox = Sandbox(
             sandbox_id=sid,

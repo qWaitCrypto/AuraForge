@@ -25,3 +25,8 @@ Each JSON file can be one of:
 2. User catalog (`.aura/market/custom`)
 
 Later sources override earlier sources on the same `id`.
+
+## Linear MCP note
+- Built-in `mcp_servers/linear.json` is a catalog spec template only.
+- Runtime connection is configured in `.aura/config/mcp.json`.
+- Setup reference: `aura/runtime/mcp/linear_setup.md`.

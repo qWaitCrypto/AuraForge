@@ -37,16 +37,6 @@ class EventKind(str, Enum):
     SUBAGENT_APPROVER_STARTED = "subagent_approver_started"
     SUBAGENT_APPROVER_COMPLETED = "subagent_approver_completed"
 
-    # A2A-lite mailbox lifecycle (local agent-to-agent messaging)
-    A2A_MESSAGE_ENQUEUED = "a2a_message_enqueued"
-    A2A_MESSAGE_DEDUPED = "a2a_message_deduped"
-    A2A_MESSAGE_LOCKED = "a2a_message_locked"
-    A2A_MESSAGE_PROCESSED = "a2a_message_processed"
-    A2A_MESSAGE_FAILED = "a2a_message_failed"
-    A2A_MESSAGE_DEADLETTERED = "a2a_message_deadlettered"
-    A2A_MESSAGE_REPLAYED = "a2a_message_replayed"
-    A2A_LOCK_RECOVERED = "a2a_lock_recovered"
-
 
 class OpKind(str, Enum):
     CHAT = "chat"

@@ -621,14 +621,8 @@ def run_subagent(
             metadata["aura_issue_key"] = exec_context.issue_key
         if isinstance(exec_context.role, str) and exec_context.role:
             metadata["aura_role"] = exec_context.role
-        if isinstance(exec_context.workspace_id, str) and exec_context.workspace_id:
-            metadata["aura_workspace_id"] = exec_context.workspace_id
-        if isinstance(exec_context.workbench_id, str) and exec_context.workbench_id:
-            metadata["aura_workbench_id"] = exec_context.workbench_id
         if isinstance(exec_context.worktree_path, str) and exec_context.worktree_path:
             metadata["aura_worktree_path"] = exec_context.worktree_path
-        if isinstance(exec_context.workspace_role, str) and exec_context.workspace_role:
-            metadata["aura_workspace_role"] = exec_context.workspace_role
     input_messages = [AgnoMessage(role="user", content=user_text)]
 
     with tool_runtime.work_spec_context(work_spec):

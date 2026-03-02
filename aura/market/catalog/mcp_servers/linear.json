@@ -1,0 +1,55 @@
+{
+  "id": "mcp.market.linear.v1",
+  "name": "linear",
+  "vendor": "linear",
+  "status": "active",
+  "enabled": false,
+  "transport": "unknown",
+  "auth": {
+    "type": "oauth",
+    "scopes": [
+      "read",
+      "write"
+    ]
+  },
+  "healthcheck": {
+    "interval_sec": 60,
+    "timeout_sec": 3
+  },
+  "timeout_sec": 60,
+  "provides_tools": [
+    {
+      "remote_name": "list_issues",
+      "tool_id": "tool.mcp.linear.list_issues.v1",
+      "description": "List issues in the Linear workspace."
+    },
+    {
+      "remote_name": "get_issue",
+      "tool_id": "tool.mcp.linear.get_issue.v1",
+      "description": "Read details for a Linear issue."
+    },
+    {
+      "remote_name": "save_issue",
+      "tool_id": "tool.mcp.linear.save_issue.v1",
+      "description": "Create or update a Linear issue."
+    },
+    {
+      "remote_name": "create_comment",
+      "tool_id": "tool.mcp.linear.create_comment.v1",
+      "description": "Create a comment on a Linear issue."
+    },
+    {
+      "remote_name": "list_projects",
+      "tool_id": "tool.mcp.linear.list_projects.v1",
+      "description": "List Linear projects."
+    },
+    {
+      "remote_name": "get_project",
+      "tool_id": "tool.mcp.linear.get_project.v1",
+      "description": "Read details for a Linear project."
+    }
+  ],
+  "metadata": {
+    "notes": "Market template only; configure the real server in .aura/config/mcp.json (recommended: npx -y mcp-remote https://mcp.linear.app/mcp)."
+  }
+}
