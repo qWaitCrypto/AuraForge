@@ -22,7 +22,6 @@ from .context_mgmt import (
 from .error_codes import ErrorCode
 from .event_bus import EventBus
 from .ids import new_id, new_tool_call_id, now_ts_ms
-from .dag_plan_runner import DAGPlanRunner
 from .llm.config import ModelConfig
 from .llm.client_exec_anthropic import complete_anthropic, stream_anthropic
 from .llm.client_exec_gemini import complete_gemini, stream_gemini
@@ -45,22 +44,23 @@ from .llm.types import (
     ToolCall,
     ToolSpec,
 )
+from .models import WorkSpec
 from .orchestrator_helpers import (
     _canonical_request_to_redacted_dict,
     _summarize_text,
     _summarize_tool_for_ui,
     _tool_calls_from_payload,
 )
-from .plan import PlanStore, TodoStore
 from .protocol import ArtifactRef, Event, EventKind, Op, OpKind
 from .run_snapshots import PendingToolCall as SnapshotPendingToolCall
 from .run_snapshots import RunSnapshot, delete_run_snapshot, read_run_snapshot, write_run_snapshot
 from .registry import SpecRegistry, SpecResolver
-from .skills import SkillStore
+from .skills import SkillStore, seed_builtin_skills
 from .snapshots import GitSnapshotBackend
 from .spec_workflow import SpecProposalStore, SpecStateStore, SpecStore
 from .stores import ApprovalStore, ArtifactStore, EventLogStore, SessionStore
 from .mcp.config import load_mcp_config
+from .workspace import WorkspaceManager
 from .tools import (
     ProjectAIGCDetectTool,
     ProjectApplyEditsTool,
@@ -79,8 +79,6 @@ from .tools import (
     SkillLoadTool,
     SkillReadFileTool,
     BrowserRunTool,
-    DAGExecuteNextTool,
-    UpdateTodoTool,
     SnapshotCreateTool,
     SnapshotDiffTool,
     SnapshotListTool,
@@ -94,9 +92,33 @@ from .tools import (
     SpecQueryTool,
     SpecSealTool,
     ToolRegistry,
-    UpdatePlanTool,
+    WorkspaceAwardClaimTool,
+    WorkspaceAcceptSubmissionTool,
+    WorkspaceAuditChainTool,
+    WorkspaceAppendSubmissionEvidenceTool,
+    WorkspaceAdvanceIssueStateTool,
+    WorkspaceCloseWorkbenchTool,
+    WorkspaceCloseWorkspaceTool,
+    WorkspaceContextTool,
+    WorkspaceCreateOrGetTool,
+    WorkspaceGcWorkbenchTool,
+    WorkspaceHeartbeatWorkbenchTool,
+    WorkspaceListAwardsTool,
+    WorkspaceListClaimsTool,
+    WorkspaceListHeartbeatsTool,
+    WorkspaceListWorkbenchesTool,
+    WorkspaceListSubmissionsTool,
+    WorkspacePublishHeartbeatTool,
+    WorkspaceProvisionWorkbenchTool,
+    WorkspaceRecoverExpiredWorkbenchesTool,
+    WorkspaceRegisterSubmissionTool,
+    WorkspaceSubmitClaimTool,
+    WorkspaceTimelineTool,
+    WorkspaceTransitionWorkbenchStateTool,
+    WorkspaceWakeAwardedAgentTool,
 )
 from .tools.runtime import (
+    InspectionResult,
     InspectionDecision,
     PlannedToolCall,
     ToolExecutionContext,
@@ -146,7 +168,7 @@ def _normalize_tool_calls(tool_calls: list[ToolCall] | None) -> list[ToolCall]:
     return out
 
 
-_DEFAULT_EXPOSED_TOOL_NAMES: set[str] = {
+_BASE_EXPOSED_TOOL_NAMES: set[str] = {
     # Project filesystem (read + navigate)
     "project__read_text",
     "project__read_text_many",
@@ -162,14 +184,12 @@ _DEFAULT_EXPOSED_TOOL_NAMES: set[str] = {
     # Browser automation (approval-gated per-step via ToolRuntime inspection)
     "browser__run",
 
-    # Session / skills / planning
+    # Session / skills
     "session__search",
     "session__export",
     "skill__list",
     "skill__load",
     "skill__read_file",
-    "update_plan",
-    "update_todo",
     # Spec workflow
     "spec__query",
     "spec__get",
@@ -180,8 +200,46 @@ _DEFAULT_EXPOSED_TOOL_NAMES: set[str] = {
     "spec__seal",
     # Subagents
     "subagent__run",
-    # DAG scheduling
-    "dag__execute_next",
+    # Workspace runtime surface (worker-safe by default)
+    "workspace__context",
+    "workspace__submit_claim",
+    "workspace__list_heartbeats",
+    "workspace__list_claims",
+    "workspace__list_awards",
+    "workspace__register_submission",
+    "workspace__audit_chain",
+    "workspace__list_submissions",
+    "workspace__list_workbenches",
+    "workspace__timeline",
+}
+
+_INTEGRATOR_EXPOSED_TOOL_NAMES: set[str] = {
+    "workspace__publish_heartbeat",
+    "workspace__award_claim",
+    "workspace__wake_awarded_agent",
+    "workspace__accept_submission",
+    "workspace__append_submission_evidence",
+    "workspace__advance_issue_state",
+    "workspace__transition_workbench_state",
+    "workspace__close_workbench",
+    "workspace__close_workspace",
+    "workspace__gc_workbench",
+    "workspace__recover_expired_workbenches",
+}
+
+# Not exposed to LLM tool lists; intended for executor/system orchestration paths only.
+_INTERNAL_WORKSPACE_TOOL_NAMES: set[str] = {
+    "workspace__create_or_get",
+    "workspace__provision_workbench",
+    "workspace__heartbeat_workbench",
+}
+
+# In a bound workbench session, keep the surface focused on delivery/runtime work.
+_WORKBENCH_HIDDEN_TOOL_NAMES: set[str] = {
+    "session__export",
+    "spec__propose",
+    "spec__apply",
+    "spec__seal",
 }
 
 
@@ -206,14 +264,13 @@ class AgnoAsyncEngine:
 
     model_router: ModelRouter = field(init=False)
     skill_store: SkillStore = field(init=False)
-    plan_store: PlanStore = field(init=False)
-    todo_store: TodoStore = field(init=False)
     spec_store: SpecStore = field(init=False)
     spec_state_store: SpecStateStore = field(init=False)
     spec_proposal_store: SpecProposalStore = field(init=False)
     snapshot_backend: GitSnapshotBackend = field(init=False)
     spec_registry: SpecRegistry = field(init=False)
     spec_resolver: SpecResolver = field(init=False)
+    workspace_manager: WorkspaceManager = field(init=False)
 
     _history: list[CanonicalMessage] | None = field(default=None, init=False)
     # Knowledge / RAG is implemented as an optional module and is not enabled by default.
@@ -228,15 +285,19 @@ class AgnoAsyncEngine:
     def __post_init__(self) -> None:
         self.project_root = self.project_root.expanduser().resolve()
         self.model_router = ModelRouter(self.model_config)
+        # Ensure built-in skills are available even when `aura init` was skipped.
+        try:
+            seed_builtin_skills(project_root=self.project_root)
+        except Exception:
+            pass
         self.skill_store = SkillStore(project_root=self.project_root)
-        self.plan_store = PlanStore(session_store=self.session_store, session_id=self.session_id)
-        self.todo_store = TodoStore(session_store=self.session_store, session_id=self.session_id)
         self.spec_store = SpecStore(project_root=self.project_root)
         self.spec_state_store = SpecStateStore(project_root=self.project_root)
         self.spec_proposal_store = SpecProposalStore(project_root=self.project_root)
         self.snapshot_backend = GitSnapshotBackend(project_root=self.project_root)
         self.spec_registry = SpecRegistry(project_root=self.project_root)
         self.spec_resolver = SpecResolver(registry=self.spec_registry)
+        self.workspace_manager = WorkspaceManager(project_root=self.project_root)
 
         if self.max_tool_turns < 1:
             raise ValueError("max_tool_turns must be >= 1")
@@ -258,11 +319,33 @@ class AgnoAsyncEngine:
         registry.register(BrowserRunTool(artifact_store=self.artifact_store))
         registry.register(SessionSearchTool())
         registry.register(SessionExportTool())
+        registry.register(WorkspaceCreateOrGetTool(self.workspace_manager))
+        registry.register(WorkspaceProvisionWorkbenchTool(self.workspace_manager))
+        registry.register(WorkspaceContextTool(self.workspace_manager))
+        registry.register(WorkspacePublishHeartbeatTool(self.workspace_manager))
+        registry.register(WorkspaceSubmitClaimTool(self.workspace_manager))
+        registry.register(WorkspaceAwardClaimTool(self.workspace_manager))
+        registry.register(WorkspaceWakeAwardedAgentTool(self.workspace_manager))
+        registry.register(WorkspaceRegisterSubmissionTool(self.workspace_manager))
+        registry.register(WorkspaceAuditChainTool(self.workspace_manager))
+        registry.register(WorkspaceHeartbeatWorkbenchTool(self.workspace_manager))
+        registry.register(WorkspaceListHeartbeatsTool(self.workspace_manager))
+        registry.register(WorkspaceListClaimsTool(self.workspace_manager))
+        registry.register(WorkspaceListAwardsTool(self.workspace_manager))
+        registry.register(WorkspaceAcceptSubmissionTool(self.workspace_manager))
+        registry.register(WorkspaceAppendSubmissionEvidenceTool(self.workspace_manager))
+        registry.register(WorkspaceAdvanceIssueStateTool(self.workspace_manager))
+        registry.register(WorkspaceTransitionWorkbenchStateTool(self.workspace_manager))
+        registry.register(WorkspaceCloseWorkbenchTool(self.workspace_manager))
+        registry.register(WorkspaceCloseWorkspaceTool(self.workspace_manager))
+        registry.register(WorkspaceGcWorkbenchTool(self.workspace_manager))
+        registry.register(WorkspaceListWorkbenchesTool(self.workspace_manager))
+        registry.register(WorkspaceListSubmissionsTool(self.workspace_manager))
+        registry.register(WorkspaceRecoverExpiredWorkbenchesTool(self.workspace_manager))
+        registry.register(WorkspaceTimelineTool(self.workspace_manager))
         registry.register(SkillListTool(self.skill_store))
         registry.register(SkillLoadTool(self.skill_store))
         registry.register(SkillReadFileTool(self.skill_store))
-        registry.register(UpdatePlanTool(self.plan_store, spec_resolver=self.spec_resolver))
-        registry.register(UpdateTodoTool(self.todo_store))
         registry.register(SpecQueryTool(self.spec_store))
         registry.register(SpecGetTool(self.spec_store))
         registry.register(SpecListAssetsTool(self.spec_registry))
@@ -289,11 +372,9 @@ class AgnoAsyncEngine:
                 tool_runtime=tool_runtime,
                 artifact_store=self.artifact_store,
                 spec_resolver=self.spec_resolver,
+                workspace_manager=self.workspace_manager,
             )
             registry.register(subagent_tool)
-
-            dag_runner = DAGPlanRunner(plan_store=self.plan_store, max_parallel=3)
-            registry.register(DAGExecuteNextTool(dag_runner=dag_runner, subagent_tool=subagent_tool))
         except Exception:
             pass
 
@@ -1315,132 +1396,6 @@ class AgnoAsyncEngine:
                                             error="Subagent requested approval.",
                                         )
 
-                    # DAG approval passthrough: `dag__execute_next` may dispatch subagents that request
-                    # approvals for internal tool calls (e.g. shell commands). Convert those into a
-                    # first-class approval pause so the CLI/web UI can show a direct y/n prompt without
-                    # requiring an extra main-agent LLM turn.
-                    if planned.tool_name == "dag__execute_next":
-                        try:
-                            msg = json.loads(tool_message)
-                        except Exception:
-                            msg = None
-
-                        needs_list: list[dict[str, Any]] = []
-                        blocked_node: str | None = None
-                        if isinstance(msg, dict):
-                            dag_res = msg.get("result")
-                            if isinstance(dag_res, dict):
-                                blocked_node_raw = dag_res.get("blocked_node")
-                                if isinstance(blocked_node_raw, str) and blocked_node_raw.strip():
-                                    blocked_node = blocked_node_raw.strip()
-                                blocked = dag_res.get("blocked_approval")
-                                if isinstance(blocked, dict):
-                                    reqs = blocked.get("requests")
-                                    if isinstance(reqs, list):
-                                        needs_list = [r for r in reqs if isinstance(r, dict)]
-                                    else:
-                                        needs_list = [blocked]
-                                elif isinstance(blocked, list):
-                                    needs_list = [r for r in blocked if isinstance(r, dict)]
-                                else:
-                                    node_results = dag_res.get("node_results")
-                                    if isinstance(node_results, dict):
-                                        for node_any in node_results.values():
-                                            if not isinstance(node_any, dict):
-                                                continue
-                                            if str(node_any.get("status") or "") != "needs_approval":
-                                                continue
-                                            req = node_any.get("approval_request")
-                                            if isinstance(req, dict):
-                                                needs_list.append(req)
-
-                        if needs_list and self.tool_runtime is not None:
-                            pending_planned: list[PlannedToolCall] = []
-                            for req in needs_list:
-                                tool_name = req.get("tool_name")
-                                if not isinstance(tool_name, str) or not tool_name.strip():
-                                    tool_name = req.get("tool")
-                                if not isinstance(tool_name, str) or not tool_name.strip():
-                                    continue
-                                tool_call_id = req.get("tool_call_id")
-                                if not isinstance(tool_call_id, str) or not tool_call_id.strip():
-                                    tool_call_id = new_tool_call_id()
-
-                                args: dict[str, Any] = {}
-                                args_ref = req.get("arguments_ref")
-                                if isinstance(args_ref, dict):
-                                    try:
-                                        ref = ArtifactRef.from_dict(args_ref)
-                                        raw_args = self.artifact_store.get(ref)
-                                        parsed = json.loads(raw_args.decode("utf-8", errors="replace"))
-                                        if isinstance(parsed, dict):
-                                            args = parsed
-                                    except Exception:
-                                        args = {}
-                                elif isinstance(req.get("arguments"), dict):
-                                    args = dict(req["arguments"])
-
-                                pending_planned.append(
-                                    self.tool_runtime.plan(
-                                        tool_execution_id=f"tool_{tool_call_id}",
-                                        tool_name=tool_name.strip(),
-                                        tool_call_id=tool_call_id.strip(),
-                                        arguments=args,
-                                    )
-                                )
-
-                            if pending_planned:
-                                focus_req = needs_list[0]
-                                focus_action = str(focus_req.get("action_summary") or focus_req.get("summary") or "").strip()
-                                if blocked_node:
-                                    prefix = f"DAG node {blocked_node} requested approval"
-                                else:
-                                    prefix = "DAG requested approval"
-                                if focus_action:
-                                    focus_action = f"{prefix}: {focus_action}"
-                                else:
-                                    focus_action = prefix
-                                focus_risk = str(focus_req.get("risk_level") or "high").strip() or "high"
-                                focus_reason = str(focus_req.get("reason") or "DAG-dispatched subagent requested approval.").strip()
-                                focus_inspection = self._inspect_tool(planned=pending_planned[0], mcp_functions=mcp_functions)
-
-                                class _PauseInspection:
-                                    action_summary: str = focus_action
-                                    risk_level: str = focus_risk
-                                    reason: str = focus_reason
-                                    diff_ref: Any | None = getattr(focus_inspection, "diff_ref", None)
-
-                                approval_id = await self._pause_run(
-                                    request_id=request_id,
-                                    turn_id=turn_id,
-                                    planned_calls=pending_planned,
-                                    context_stats=context_stats,
-                                    model_profile_id=getattr(profile, "profile_id", None),
-                                    inspection=_PauseInspection(),
-                                    focus_tool_call_id=pending_planned[0].tool_call_id,
-                                    resume_payload_extra={
-                                        "source": "dag",
-                                        "dag": {
-                                            "blocked_node": blocked_node,
-                                            "origin_tool_call_id": planned.tool_call_id,
-                                            "origin_tool_execution_id": planned.tool_execution_id,
-                                            # Use this to optionally re-dispatch after approval.
-                                            "dag_execute_args": dict(planned.arguments) if isinstance(planned.arguments, dict) else {},
-                                        },
-                                    },
-                                )
-                                return RunResult(
-                                    status="needs_approval",
-                                    run_id=request_id,
-                                    session_id=self.session_id,
-                                    approval_id=approval_id,
-                                    pending_tools=[
-                                        PendingToolCall(tool_call_id=p.tool_call_id, tool_name=p.tool_name, args=dict(p.arguments))
-                                        for p in pending_planned
-                                    ],
-                                    error="DAG requested approval.",
-                                )
-
                 request = self._build_request(profile=profile, extra_tools=mcp_specs)
 
             await self._emit(
@@ -1861,10 +1816,107 @@ class AgnoAsyncEngine:
 
         return adapt_tool_specs_for_profile(tools=tools, profile=profile)
 
+    def _current_workspace_role(self) -> str | None:
+        try:
+            binding = self.workspace_manager.get_session_binding(session_id=self.session_id)
+        except Exception:
+            binding = None
+        if binding is None:
+            return None
+        if binding.role is not None:
+            return binding.role.value
+        try:
+            wb = self.workspace_manager.store.get_workbench(binding.workbench_id)
+        except Exception:
+            return None
+        if wb.role is not None:
+            return wb.role.value
+        return None
+
+    def _is_workbench_bound_session(self) -> bool:
+        try:
+            return self.workspace_manager.get_session_binding(session_id=self.session_id) is not None
+        except Exception:
+            return False
+
+    def _exposed_tool_names_for_session(self) -> set[str]:
+        names = set(_BASE_EXPOSED_TOOL_NAMES)
+        role = (self._current_workspace_role() or "").strip().lower()
+        if role == "integrator":
+            names.update(_INTEGRATOR_EXPOSED_TOOL_NAMES)
+        names.difference_update(_INTERNAL_WORKSPACE_TOOL_NAMES)
+        if self._is_workbench_bound_session():
+            names.difference_update(_WORKBENCH_HIDDEN_TOOL_NAMES)
+        return names
+
+    def _workspace_system_prompt_block(self) -> str | None:
+        try:
+            resolved = self.workspace_manager.resolve_context(session_id=self.session_id)
+        except Exception:
+            return None
+
+        ws = resolved.workspace
+        wb = resolved.workbench
+        issue_label = f"{ws.issue_ref.provider}:{ws.issue_ref.key} ({ws.issue_ref.id})"
+        repo_label = f"{ws.repo_ref.provider}:{ws.repo_ref.owner}/{ws.repo_ref.repo}"
+        lines = [
+            "Workspace Context (authoritative)",
+            f"- workspace_id: {ws.workspace_id}",
+            f"- issue: {issue_label}",
+            f"- repo: {repo_label}",
+            f"- base_branch: {ws.base_branch}",
+            f"- staging_branch: {ws.staging_branch}",
+            f"- merge_policy: {ws.merge_policy.value}",
+            f"- push_policy: {ws.push_policy.value}",
+            f"- workbench_id: {wb.workbench_id}",
+            f"- role: {wb.role.value}",
+            f"- branch: {wb.branch}",
+            f"- worktree_path: {wb.worktree_path}",
+            "",
+            "Workspace Rules",
+            "- Operate only inside the bound worktree path unless explicitly approved.",
+            "- Use skills for Linear/GitHub external actions; workspace tools only record/audit evidence.",
+            "- Record delivery evidence with workspace__register_submission.",
+            "- Internal workspace tools are executor-only and not part of your callable surface.",
+        ]
+        return "\n".join(lines)
+
+    def _workspace_scope_work_spec(self) -> WorkSpec | None:
+        """
+        Build a minimal WorkSpec that enforces the bound workspace root as a hard tool scope.
+
+        This is applied to the main agent runtime tool path so ordinary project tools cannot
+        escape the session's bound workbench.
+        """
+        try:
+            binding = self.workspace_manager.get_session_binding(session_id=self.session_id)
+        except Exception:
+            return None
+        if binding is None:
+            return None
+        try:
+            wb = self.workspace_manager.store.get_workbench(binding.workbench_id)
+        except Exception:
+            return None
+        root = str(getattr(wb, "worktree_path", "") or "").strip()
+        if not root:
+            return None
+        try:
+            return WorkSpec.model_validate(
+                {
+                    "goal": "Enforce bound workspace scope for runtime tool execution.",
+                    "expected_outputs": [{"type": "other", "format": "scope-only"}],
+                    "resource_scope": {"workspace_roots": [root]},
+                }
+            )
+        except Exception:
+            return None
+
     def _build_request(self, *, profile: ModelProfile | None = None, extra_tools: list[ToolSpec] | None = None) -> CanonicalRequest:
         tools: list[ToolSpec] = []
         if self.tools_enabled and self.tool_registry is not None:
-            tools = [t for t in self.tool_registry.list_specs() if t.name in _DEFAULT_EXPOSED_TOOL_NAMES]
+            exposed = self._exposed_tool_names_for_session()
+            tools = [t for t in self.tool_registry.list_specs() if t.name in exposed]
         if extra_tools:
             tools = [*tools, *list(extra_tools)]
         if profile is not None and tools:
@@ -1873,18 +1925,19 @@ class AgnoAsyncEngine:
             except Exception:
                 pass
         skills = self.skill_store.list()
-        dag_plan = self.plan_store.get().plan
-        todo = self.todo_store.get().todo
 
         state = self.spec_state_store.get()
         spec_summary = SpecStatusSummary(status=state.status, label=state.label)
 
-        surface = build_agent_surface(tools=tools, skills=skills, dag_plan=dag_plan, todo=todo, spec=spec_summary)
+        surface = build_agent_surface(tools=tools, skills=skills, spec=spec_summary)
 
         base_system = self.system_prompt or _load_default_system_prompt()
         parts = [base_system]
         if isinstance(self.memory_summary, str) and self.memory_summary.strip():
             parts.append("Session memory summary:\n\n" + self.memory_summary.strip())
+        workspace_block = self._workspace_system_prompt_block()
+        if isinstance(workspace_block, str) and workspace_block.strip():
+            parts.append(workspace_block.strip())
         parts.append(surface)
         system = "\n\n".join(parts)
         return CanonicalRequest(system=system, messages=list(self._history or []), tools=tools)
@@ -1992,11 +2045,44 @@ class AgnoAsyncEngine:
         """
         if self.tool_runtime is None:
             raise RuntimeError("Tool runtime not initialized.")
-        if self.tool_runtime.get_tool(planned.tool_name) is not None:
-            return self.tool_runtime.inspect(planned)
-        if planned.tool_name in mcp_functions:
-            from .tools.runtime import InspectionResult, ToolApprovalMode
 
+        # Workbench execution is autonomous by default: no human approval pauses.
+        # Hard constraints (internal-only, workspace scope, role-based shell policy) still apply.
+        from .tools.runtime import ToolApprovalMode
+
+        if self._is_workbench_bound_session() and self.tool_runtime.get_approval_mode() is not ToolApprovalMode.TRUSTED:
+            self.tool_runtime.set_approval_mode(ToolApprovalMode.TRUSTED)
+
+        caller_kind = str(getattr(planned, "caller_kind", "llm") or "llm").strip().lower()
+        if caller_kind not in {"llm", "system"}:
+            caller_kind = "llm"
+
+        runtime_tool = self.tool_runtime.get_tool(planned.tool_name)
+
+        # Hard consistency rule: for LLM-originated calls, visibility equals executability.
+        # If a runtime tool is not in the current exposed surface, deny directly (no approval fallback).
+        if caller_kind == "llm" and runtime_tool is not None:
+            exposed = self._exposed_tool_names_for_session()
+            if planned.tool_name not in exposed:
+                diff_ref = self.tool_runtime.artifact_store.put(
+                    json.dumps(planned.arguments, ensure_ascii=False, sort_keys=True, indent=2),
+                    kind="diff",
+                    meta={"summary": f"Preview for blocked hidden tool: {planned.tool_name}"},
+                )
+                return InspectionResult(
+                    decision=InspectionDecision.DENY,
+                    action_summary=f"Tool not available in this workspace role: {planned.tool_name}",
+                    risk_level="high",
+                    reason="The requested tool is not in the session's exposed tool surface for current role.",
+                    error_code=ErrorCode.PERMISSION,
+                    diff_ref=diff_ref,
+                )
+
+        if runtime_tool is not None:
+            scope_work_spec = self._workspace_scope_work_spec()
+            with self.tool_runtime.work_spec_context(scope_work_spec):
+                return self.tool_runtime.inspect(planned)
+        if planned.tool_name in mcp_functions:
             mode = self.tool_runtime.get_approval_mode()
             if mode is ToolApprovalMode.TRUSTED:
                 return InspectionResult(
@@ -2020,7 +2106,9 @@ class AgnoAsyncEngine:
                 error_code=None,
                 diff_ref=diff_ref,
             )
-        return self.tool_runtime.inspect(planned)
+        scope_work_spec = self._workspace_scope_work_spec()
+        with self.tool_runtime.work_spec_context(scope_work_spec):
+            return self.tool_runtime.inspect(planned)
 
     async def _needs_more_approval(
         self,
@@ -2445,12 +2533,39 @@ class AgnoAsyncEngine:
             step_id=planned.tool_execution_id,
         )
 
+        workspace_id: str | None = None
+        workbench_id: str | None = None
+        worktree_path: str | None = None
+        workspace_role: str | None = None
+        try:
+            binding = self.workspace_manager.get_session_binding(session_id=self.session_id)
+            if binding is not None:
+                workspace_id = binding.workspace_id
+                workbench_id = binding.workbench_id
+                if binding.role is not None:
+                    workspace_role = binding.role.value
+                try:
+                    wb = self.workspace_manager.store.get_workbench(binding.workbench_id)
+                except Exception:
+                    wb = None
+                if wb is not None:
+                    worktree_path = wb.worktree_path
+                    if workspace_role is None and wb.role is not None:
+                        workspace_role = wb.role.value
+        except Exception:
+            pass
+
         ctx = ToolExecutionContext(
             session_id=self.session_id,
             request_id=request_id,
             turn_id=turn_id,
             tool_execution_id=planned.tool_execution_id,
             event_bus=self.event_bus,
+            workspace_id=workspace_id,
+            workbench_id=workbench_id,
+            worktree_path=worktree_path,
+            workspace_role=workspace_role,
+            caller_kind=str(getattr(planned, "caller_kind", "llm") or "llm"),
         )
 
         started = time.monotonic()
@@ -2463,10 +2578,17 @@ class AgnoAsyncEngine:
             except Exception:
                 accepts_context = False
 
-            if accepts_context:
-                raw = await asyncio.to_thread(tool.execute, args=planned.arguments, project_root=self.project_root, context=ctx)
-            else:
-                raw = await asyncio.to_thread(tool.execute, args=planned.arguments, project_root=self.project_root)
+            scope_work_spec = self._workspace_scope_work_spec()
+            with self.tool_runtime.work_spec_context(scope_work_spec):
+                if accepts_context:
+                    raw = await asyncio.to_thread(
+                        tool.execute,
+                        args=planned.arguments,
+                        project_root=self.project_root,
+                        context=ctx,
+                    )
+                else:
+                    raw = await asyncio.to_thread(tool.execute, args=planned.arguments, project_root=self.project_root)
         except Exception as e:
             duration_ms = int((time.monotonic() - started) * 1000)
             code = _classify_tool_exception(e)
@@ -2538,34 +2660,6 @@ class AgnoAsyncEngine:
             step_id=planned.tool_execution_id,
         )
 
-        if planned.tool_name in {"update_plan", "update_todo"}:
-            try:
-                if planned.tool_name == "update_plan":
-                    state = self.plan_store.get()
-                    plan_type = "dag"
-                    items = state.plan
-                    explanation = state.explanation
-                    updated_at = state.updated_at
-                else:
-                    state = self.todo_store.get()
-                    plan_type = "todo"
-                    items = state.todo
-                    explanation = state.explanation
-                    updated_at = state.updated_at
-                await self._emit(
-                    kind=EventKind.PLAN_UPDATE,
-                    payload={
-                        "plan_type": plan_type,
-                        "plan": [t.to_dict() for t in items],
-                        "explanation": explanation,
-                        "updated_at": updated_at,
-                    },
-                    request_id=request_id,
-                    turn_id=turn_id,
-                    step_id=planned.tool_execution_id,
-                )
-            except Exception:
-                pass
         return tool_message
 
     async def _tool_result_denied(

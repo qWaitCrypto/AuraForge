@@ -351,6 +351,96 @@ def _build_parser() -> argparse.ArgumentParser:
     session_resume_parser.set_defaults(enable_tools=None)
     session_resume_parser.set_defaults(func=_cmd_session_resume)
 
+    workspace_parser = subparsers.add_parser("workspace", help="Inspect workspace runtime state.")
+    workspace_subparsers = workspace_parser.add_subparsers(dest="workspace_cmd", required=True)
+
+    workspace_create_parser = workspace_subparsers.add_parser("create", help="Create or get an issue workspace.")
+    workspace_create_parser.add_argument("--workspace-id", dest="workspace_id", default=None, help="Optional workspace id.")
+    workspace_create_parser.add_argument(
+        "--issue-provider",
+        dest="issue_provider",
+        default="linear",
+        help="Issue provider name (default: linear).",
+    )
+    workspace_create_parser.add_argument("--issue-id", dest="issue_id", required=True, help="Issue id in provider.")
+    workspace_create_parser.add_argument("--issue-key", dest="issue_key", required=True, help="Issue key (e.g. ABC-123).")
+    workspace_create_parser.add_argument("--issue-url", dest="issue_url", default=None, help="Optional issue URL.")
+    workspace_create_parser.add_argument(
+        "--repo-provider",
+        dest="repo_provider",
+        default="github",
+        help="Repository provider name (default: github).",
+    )
+    workspace_create_parser.add_argument("--repo-owner", dest="repo_owner", required=True, help="Repository owner/org.")
+    workspace_create_parser.add_argument("--repo-name", dest="repo_name", required=True, help="Repository name.")
+    workspace_create_parser.add_argument("--base-branch", dest="base_branch", default="main", help="Base branch (default: main).")
+    workspace_create_parser.add_argument(
+        "--staging-enabled",
+        dest="staging_enabled",
+        action="store_true",
+        help="Enable staging branch strategy.",
+    )
+    workspace_create_parser.add_argument(
+        "--no-staging",
+        dest="staging_enabled",
+        action="store_false",
+        help="Disable staging branch strategy.",
+    )
+    workspace_create_parser.set_defaults(staging_enabled=True)
+    workspace_create_parser.set_defaults(func=_cmd_workspace_create)
+
+    workspace_provision_parser = workspace_subparsers.add_parser("provision", help="Provision one workspace workbench.")
+    workspace_provision_parser.add_argument("workspace_id", help="Workspace ID.")
+    workspace_provision_parser.add_argument("--agent-id", dest="agent_id", required=True, help="Agent id.")
+    workspace_provision_parser.add_argument("--instance-id", dest="instance_id", required=True, help="Agent instance id.")
+    workspace_provision_parser.add_argument(
+        "--role",
+        dest="role",
+        choices=["worker", "integrator", "reviewer"],
+        default="worker",
+        help="Workbench role (default: worker).",
+    )
+    workspace_provision_parser.add_argument(
+        "--bind-session",
+        dest="bind_session_id",
+        default=None,
+        help="Optional session id to bind to this workbench.",
+    )
+    workspace_provision_parser.add_argument(
+        "--lease-seconds",
+        dest="lease_seconds",
+        type=int,
+        default=900,
+        help="Workbench lease seconds (default: 900).",
+    )
+    workspace_provision_parser.set_defaults(func=_cmd_workspace_provision)
+
+    workspace_list_parser = workspace_subparsers.add_parser("list", help="List issue workspaces.")
+    workspace_list_parser.add_argument(
+        "--state",
+        choices=["draft", "active", "integrating", "done", "blocked", "archived"],
+        default=None,
+        help="Optional workspace state filter.",
+    )
+    workspace_list_parser.add_argument(
+        "--issue-key",
+        dest="issue_key",
+        default=None,
+        help="Optional issue key filter (e.g. ABC-123).",
+    )
+    workspace_list_parser.set_defaults(func=_cmd_workspace_list)
+
+    workspace_audit_parser = workspace_subparsers.add_parser("audit", help="Show full audit chain for one workspace.")
+    workspace_audit_parser.add_argument("workspace_id", help="Workspace ID (e.g. ws_ABC-123).")
+    workspace_audit_parser.add_argument(
+        "--timeline-limit",
+        dest="timeline_limit",
+        type=int,
+        default=200,
+        help="Max timeline events to include (default: 200).",
+    )
+    workspace_audit_parser.set_defaults(func=_cmd_workspace_audit)
+
     debug_parser = subparsers.add_parser("debug", help="Debug utilities.")
     debug_subparsers = debug_parser.add_subparsers(dest="debug_cmd", required=True)
     debug_export_parser = debug_subparsers.add_parser("export", help="Export a replay bundle.")
@@ -1672,6 +1762,175 @@ def _cmd_session_resume(args: argparse.Namespace) -> int:
     return _cmd_chat(args2)
 
 
+def _cmd_workspace_create(args: argparse.Namespace) -> int:
+    from .runtime.project import RuntimePaths
+    from .runtime.models.workspace import WorkspaceIssueRef, WorkspaceRepoRef
+    from .runtime.workspace import WorkspaceManager
+
+    try:
+        paths = RuntimePaths.discover()
+    except FileNotFoundError as e:
+        print(str(e), file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+
+    try:
+        issue_url_raw = getattr(args, "issue_url", None)
+        issue_url = issue_url_raw.strip() if isinstance(issue_url_raw, str) and issue_url_raw.strip() else None
+        issue_ref = WorkspaceIssueRef(
+            provider=str(getattr(args, "issue_provider", "linear") or "linear").strip(),
+            id=str(getattr(args, "issue_id", "") or "").strip(),
+            key=str(getattr(args, "issue_key", "") or "").strip(),
+            url=issue_url,
+        )
+        repo_ref = WorkspaceRepoRef(
+            provider=str(getattr(args, "repo_provider", "github") or "github").strip(),
+            owner=str(getattr(args, "repo_owner", "") or "").strip(),
+            repo=str(getattr(args, "repo_name", "") or "").strip(),
+        )
+    except Exception as e:
+        print(f"Invalid workspace refs: {e}", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+
+    manager = WorkspaceManager(project_root=paths.project_root)
+    try:
+        ws = manager.create_or_get_workspace(
+            issue_ref=issue_ref,
+            repo_ref=repo_ref,
+            base_branch=str(getattr(args, "base_branch", "main") or "main").strip() or "main",
+            staging_enabled=bool(getattr(args, "staging_enabled", True)),
+            workspace_id=(str(getattr(args, "workspace_id", "")).strip() or None),
+        )
+    except Exception as e:
+        print(str(e), file=sys.stderr)
+        return EXIT_ERROR
+
+    print(json.dumps({"ok": True, "workspace": ws.model_dump(mode="json")}, ensure_ascii=False, indent=2, sort_keys=True))
+    return EXIT_OK
+
+
+def _cmd_workspace_provision(args: argparse.Namespace) -> int:
+    from .runtime.project import RuntimePaths
+    from .runtime.models.workspace import WorkbenchRole
+    from .runtime.workspace import WorkspaceManager
+
+    try:
+        paths = RuntimePaths.discover()
+    except FileNotFoundError as e:
+        print(str(e), file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+
+    workspace_id = str(getattr(args, "workspace_id", "") or "").strip()
+    agent_id = str(getattr(args, "agent_id", "") or "").strip()
+    instance_id = str(getattr(args, "instance_id", "") or "").strip()
+    if not workspace_id or not agent_id or not instance_id:
+        print("workspace_id, agent_id, and instance_id are required.", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+
+    role_raw = str(getattr(args, "role", WorkbenchRole.WORKER.value) or WorkbenchRole.WORKER.value).strip()
+    try:
+        role = WorkbenchRole(role_raw)
+    except ValueError:
+        print(f"Invalid role: {role_raw}", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+
+    lease_seconds_raw = getattr(args, "lease_seconds", 900)
+    try:
+        lease_seconds = max(1, int(lease_seconds_raw))
+    except Exception:
+        print(f"Invalid lease_seconds: {lease_seconds_raw}", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+
+    bind_session_id = str(getattr(args, "bind_session_id", "") or "").strip() or None
+    manager = WorkspaceManager(project_root=paths.project_root)
+    try:
+        wb = manager.provision_workbench(
+            workspace_id=workspace_id,
+            agent_id=agent_id,
+            instance_id=instance_id,
+            role=role,
+            bind_session_id=bind_session_id,
+            lease_seconds=lease_seconds,
+        )
+        ws = manager.get_workspace(workspace_id=wb.workspace_id)
+        binding = manager.get_session_binding(session_id=bind_session_id) if bind_session_id else None
+    except Exception as e:
+        print(str(e), file=sys.stderr)
+        return EXIT_ERROR
+
+    payload = {
+        "ok": True,
+        "workspace": ws.model_dump(mode="json"),
+        "workbench": wb.model_dump(mode="json"),
+        "binding": (binding.model_dump(mode="json") if binding is not None else None),
+    }
+    print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+    return EXIT_OK
+
+
+def _cmd_workspace_list(args: argparse.Namespace) -> int:
+    from .runtime.project import RuntimePaths
+    from .runtime.models.workspace import IssueWorkspaceState
+    from .runtime.workspace import WorkspaceManager
+
+    try:
+        paths = RuntimePaths.discover()
+    except FileNotFoundError as e:
+        print(str(e), file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+
+    state: IssueWorkspaceState | None = None
+    state_raw = str(getattr(args, "state", "") or "").strip()
+    if state_raw:
+        try:
+            state = IssueWorkspaceState(state_raw)
+        except ValueError:
+            print(f"Invalid workspace state: {state_raw}", file=sys.stderr)
+            return EXIT_VALIDATION_FAILED
+
+    issue_key = str(getattr(args, "issue_key", "") or "").strip() or None
+    manager = WorkspaceManager(project_root=paths.project_root)
+    items = manager.store.list_workspaces(state=state, issue_key=issue_key)
+    for ws in items:
+        print(
+            f"{ws.workspace_id}\tstate={ws.state.value}\tissue={ws.issue_ref.key}\t"
+            f"repo={ws.repo_ref.owner}/{ws.repo_ref.repo}\tupdated_at={ws.updated_at}"
+        )
+    return EXIT_OK
+
+
+def _cmd_workspace_audit(args: argparse.Namespace) -> int:
+    from .runtime.project import RuntimePaths
+    from .runtime.workspace import WorkspaceManager
+
+    try:
+        paths = RuntimePaths.discover()
+    except FileNotFoundError as e:
+        print(str(e), file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+
+    workspace_id = str(getattr(args, "workspace_id", "") or "").strip()
+    if not workspace_id:
+        print("workspace_id is required.", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+
+    timeline_limit_raw = getattr(args, "timeline_limit", 200)
+    try:
+        timeline_limit = max(1, int(timeline_limit_raw))
+    except Exception:
+        print(f"Invalid timeline_limit: {timeline_limit_raw}", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+
+    manager = WorkspaceManager(project_root=paths.project_root)
+    try:
+        chain = manager.audit_chain(workspace_id=workspace_id, include_timeline=True, timeline_limit=timeline_limit)
+    except Exception as e:
+        print(str(e), file=sys.stderr)
+        return EXIT_ERROR
+
+    print(json.dumps(chain, ensure_ascii=False, indent=2, sort_keys=True))
+    return EXIT_OK
+
+
 def _cmd_debug_export(args: argparse.Namespace) -> int:
     from .runtime.project import RuntimePaths
     from .runtime.stores import FileApprovalStore, FileArtifactStore, FileEventLogStore, FileSessionStore
@@ -2309,6 +2568,9 @@ def _cmd_init(args: argparse.Namespace) -> int:
         project_root / ".aura" / "artifacts",
         project_root / ".aura" / "runs",
         project_root / ".aura" / "state",
+        project_root / ".aura" / "state" / "workspaces",
+        project_root / ".aura" / "state" / "workspaces" / "sessions",
+        project_root / ".aura" / "state" / "workbenches",
         project_root / ".aura" / "index",
         project_root / ".aura" / "cache",
         project_root / ".aura" / "tmp",

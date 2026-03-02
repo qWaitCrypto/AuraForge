@@ -45,6 +45,8 @@ _PRESETS: dict[str, SubagentPreset] = {
             "shell__run",
             "snapshot__create",
             "snapshot__diff",
+            "workspace__context",
+            "workspace__register_submission",
         ],
         limits=SubagentLimits(max_turns=12, max_tool_calls=24),
     ),
@@ -70,6 +72,8 @@ _PRESETS: dict[str, SubagentPreset] = {
 
             "snapshot__create",
             "snapshot__diff",
+            "workspace__context",
+            "workspace__register_submission",
         ],
         limits=SubagentLimits(max_turns=12, max_tool_calls=24),
         # Auto-approve running the *skill runner* script (see subagents/runner.py safety checks).
@@ -100,6 +104,8 @@ _PRESETS: dict[str, SubagentPreset] = {
 
             "snapshot__create",
             "snapshot__diff",
+            "workspace__context",
+            "workspace__register_submission",
         ],
         limits=SubagentLimits(max_turns=12, max_tool_calls=24),
         # Auto-approve running the *skill runner* script (see subagents/runner.py safety checks).
@@ -115,10 +121,66 @@ _PRESETS: dict[str, SubagentPreset] = {
             "skill__load",
             "skill__read_file",
             "browser__run",
+            "workspace__context",
+            "workspace__register_submission",
         ],
         limits=SubagentLimits(max_turns=20, max_tool_calls=50),
         safe_shell_prefixes=[],
         # Testing mode: allow browser automation without approval prompts.
+        auto_approve_tools=["browser__run"],
+    ),
+    "market_worker": SubagentPreset(
+        name="market_worker",
+        prompt_asset="subagent_market_worker.md",
+        default_allowlist=[
+            # Project I/O and edits.
+            "project__list_dir",
+            "project__glob",
+            "project__read_text",
+            "project__read_text_many",
+            "project__search_text",
+            "project__text_stats",
+            "project__apply_edits",
+            "project__apply_patch",
+            "project__patch",
+            "project__aigc_detect",
+
+            # Local execution and browser automation.
+            "shell__run",
+            "browser__run",
+
+            # Skills.
+            "skill__list",
+            "skill__load",
+            "skill__read_file",
+
+            # Snapshots.
+            "snapshot__create",
+            "snapshot__diff",
+            "snapshot__list",
+            "snapshot__read_text",
+            "snapshot__rollback",
+
+            # Spec read-only querying.
+            "spec__query",
+            "spec__get",
+            "spec__list_assets",
+            "spec__get_asset",
+
+            # Session context lookup.
+            "session__search",
+
+            # Workspace collaboration.
+            "workspace__context",
+            "workspace__heartbeat_workbench",
+            "workspace__register_submission",
+            "workspace__append_submission_evidence",
+            "workspace__audit_chain",
+            "workspace__list_submissions",
+            "workspace__timeline",
+        ],
+        limits=SubagentLimits(max_turns=20, max_tool_calls=60),
+        safe_shell_prefixes=[],
         auto_approve_tools=["browser__run"],
     ),
     "verifier": SubagentPreset(
@@ -136,6 +198,8 @@ _PRESETS: dict[str, SubagentPreset] = {
             "snapshot__read_text",
             "snapshot__diff",
             "session__search",
+            "workspace__context",
+            "workspace__register_submission",
         ],
         limits=SubagentLimits(max_turns=6, max_tool_calls=12),
     ),

@@ -3,6 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from ..models.agent_spec import AgentExecutionMode
+from ..models.mcp_spec import McpTransport
+from ..models.tool_spec import ToolEntrypointType
 from ..registry import SpecResolver
 from ..registry.spec_registry import SpecRegistry
 
@@ -37,6 +40,30 @@ def _matches_query(payload: dict[str, Any], query: str) -> bool:
     return q in hay
 
 
+def _tool_is_runnable(spec: Any) -> bool:
+    entry_type = getattr(getattr(spec, "entrypoint", None), "type", None)
+    return entry_type is not ToolEntrypointType.UNKNOWN
+
+
+def _mcp_is_runnable(spec: Any) -> bool:
+    if not bool(getattr(spec, "enabled", False)):
+        return False
+    transport = getattr(spec, "transport", None)
+    if transport is McpTransport.STDIO:
+        return bool(getattr(spec, "command", None))
+    if transport in {McpTransport.HTTP, McpTransport.WS}:
+        return bool(getattr(spec, "endpoint", None))
+    return False
+
+
+def _agent_is_runnable(spec: Any) -> bool:
+    mode = getattr(getattr(spec, "execution", None), "mode", None)
+    preset = getattr(getattr(spec, "execution", None), "preset_name", None)
+    if mode is AgentExecutionMode.SUBAGENT_PRESET:
+        return isinstance(preset, str) and bool(preset.strip())
+    return False
+
+
 def _agent_summary(spec: Any, *, include_relations: bool) -> dict[str, Any]:
     out = {
         "id": spec.id,
@@ -50,6 +77,7 @@ def _agent_summary(spec: Any, *, include_relations: bool) -> dict[str, Any]:
         "skill_count": len(spec.skill_ids),
         "tool_count": len(spec.tool_ids),
         "mcp_server_count": len(spec.mcp_server_ids),
+        "runnable": _agent_is_runnable(spec),
         "tags": list(spec.tags),
     }
     if include_relations:
@@ -86,6 +114,7 @@ def _tool_summary(spec: Any, *, include_relations: bool) -> dict[str, Any]:
         "kind": spec.kind.value,
         "runtime_name": spec.runtime_name,
         "approval_required": bool(spec.policy.approval_required),
+        "runnable": _tool_is_runnable(spec),
         "tags": list(spec.tags),
     }
     if include_relations and spec.mcp_binding is not None:
@@ -105,6 +134,7 @@ def _mcp_summary(spec: Any, *, include_relations: bool) -> dict[str, Any]:
         "enabled": bool(spec.enabled),
         "transport": spec.transport.value,
         "tool_count": len(spec.provides_tools),
+        "runnable": _mcp_is_runnable(spec),
         "tags": list(spec.tags),
     }
     if include_relations:

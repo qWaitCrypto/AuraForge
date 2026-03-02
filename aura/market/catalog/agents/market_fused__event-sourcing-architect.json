@@ -21,6 +21,10 @@
     "tool.market.agents_main.c4_architecture.c4_architecture.v1"
   ],
   "mcp_server_ids": [],
+  "execution": {
+    "mode": "subagent_preset",
+    "preset_name": "market_worker"
+  },
   "metadata": {
     "source_strategy": "shortlist-v1-fused",
     "prompt_ref": "aura/market/catalog/agents/market_fused__event-sourcing-architect.md",

@@ -27,6 +27,8 @@ class LoadedSkill:
     meta: SkillMetadata
     instructions: str
     resources: list[str]
+    skill_root: str
+    skill_md_path: str
 
     def to_public_dict(self) -> dict[str, Any]:
         return {
@@ -34,6 +36,8 @@ class LoadedSkill:
             "description": self.meta.description,
             "allowed_tools": list(self.meta.allowed_tools) if self.meta.allowed_tools is not None else None,
             "metadata": dict(self.meta.metadata) if self.meta.metadata is not None else None,
+            "skill_root": self.skill_root,
+            "skill_md_path": self.skill_md_path,
             "instructions": self.instructions,
             "resources": list(self.resources),
         }
@@ -168,7 +172,15 @@ class SkillStore:
         if not isinstance(instructions, str):
             instructions = str(instructions)
         resources = _list_resources(meta.skill_dir)
-        return LoadedSkill(meta=meta, instructions=instructions, resources=resources)
+        skill_root = _path_for_public(self._project_root, meta.skill_dir)
+        skill_md_path = _path_for_public(self._project_root, meta.skill_md_path)
+        return LoadedSkill(
+            meta=meta,
+            instructions=instructions,
+            resources=resources,
+            skill_root=skill_root,
+            skill_md_path=skill_md_path,
+        )
 
 
 def seed_builtin_skills(*, project_root: Path) -> list[str]:
@@ -231,6 +243,13 @@ def _list_resources(skill_dir: Path) -> list[str]:
             continue
         out.append(str(path.relative_to(skill_dir)))
     return out
+
+
+def _path_for_public(project_root: Path, target: Path) -> str:
+    try:
+        return str(target.resolve().relative_to(project_root.resolve()))
+    except Exception:
+        return str(target.resolve())
 
 
 def _builtin_skills_root() -> Path:

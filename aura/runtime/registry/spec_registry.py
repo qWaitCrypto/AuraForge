@@ -331,6 +331,10 @@ class SpecRegistry:
     ) -> None:
         self.clear()
 
+        # Load market assets first so runtime/local overlays can upgrade them in-place
+        # (notably MCP server specs and MCP proxy tools).
+        self._load_market_catalog_specs()
+
         if tool_registry is not None:
             self._load_tool_specs(tool_registry=tool_registry)
         if skill_store is not None:
@@ -339,7 +343,6 @@ class SpecRegistry:
             self._load_mcp_specs(mcp_config=mcp_config)
         if include_builtin_subagents:
             self._load_builtin_subagent_agents()
-        self._load_market_catalog_specs()
 
     def _load_tool_specs(self, *, tool_registry: "ToolRegistry") -> None:
         for tool in tool_registry.list_specs():
@@ -552,8 +555,18 @@ class SpecRegistry:
     def _load_mcp_specs(self, *, mcp_config: McpConfig) -> None:
         for server_name, server in sorted(mcp_config.servers.items()):
             try:
-                spec = self._build_mcp_server_spec(server_name=server_name, server=server)
-                self.register_mcp_server(spec)
+                existing_id = self.resolve_mcp_id_by_name(server_name)
+                existing = self.get_mcp_server(existing_id) if existing_id is not None else None
+                spec = self._build_mcp_server_spec(
+                    server_name=server_name,
+                    server=server,
+                    server_id=(existing.id if existing is not None else None),
+                    existing=existing,
+                )
+                if existing is None:
+                    self.register_mcp_server(spec)
+                else:
+                    self.upsert_mcp_server(spec)
             except Exception:
                 continue
 
@@ -651,15 +664,29 @@ class SpecRegistry:
 
         return updated_tools
 
-    def _build_mcp_server_spec(self, *, server_name: str, server: McpServerConfig) -> McpServerSpec:
-        server_id = make_mcp_spec_id(namespace="server", server_name=server_name)
-        auth = McpAuthSpec(type=McpAuthType.NONE, scopes=[])
+    def _build_mcp_server_spec(
+        self,
+        *,
+        server_name: str,
+        server: McpServerConfig,
+        server_id: str | None = None,
+        existing: McpServerSpec | None = None,
+    ) -> McpServerSpec:
+        resolved_server_id = (
+            str(server_id).strip()
+            if isinstance(server_id, str) and str(server_id).strip()
+            else make_mcp_spec_id(namespace="server", server_name=server_name)
+        )
+        auth = existing.auth if existing is not None else McpAuthSpec(type=McpAuthType.NONE, scopes=[])
         command = (server.command or "").strip()
         transport = McpTransport.STDIO if command else McpTransport.UNKNOWN
+        metadata = dict(existing.metadata) if existing is not None and isinstance(existing.metadata, dict) else {}
+        metadata["origin"] = "mcp.config"
+        metadata["source"] = "mcp.json"
         return McpServerSpec(
-            id=server_id,
+            id=resolved_server_id,
             name=server_name,
-            vendor="local",
+            vendor=(existing.vendor if existing is not None else "local"),
             status=SpecLifecycle.ACTIVE if server.enabled else SpecLifecycle.DEPRECATED,
             enabled=bool(server.enabled),
             transport=transport,
@@ -669,8 +696,13 @@ class SpecRegistry:
             cwd=server.cwd,
             timeout_sec=int(max(1.0, float(server.timeout_s))),
             auth=auth,
-            healthcheck=McpHealthcheck(interval_sec=60, timeout_sec=max(1, min(30, int(server.timeout_s)))),
-            metadata={"origin": "mcp.config", "source": "mcp.json"},
+            healthcheck=(
+                existing.healthcheck
+                if existing is not None
+                else McpHealthcheck(interval_sec=60, timeout_sec=max(1, min(30, int(server.timeout_s))))
+            ),
+            provides_tools=(list(existing.provides_tools) if existing is not None else []),
+            metadata=metadata,
         )
 
     def _load_builtin_subagent_agents(self) -> None:
@@ -681,6 +713,7 @@ class SpecRegistry:
             "doc_worker": ["document_generation", "skill_execution"],
             "sheet_worker": ["spreadsheet_processing", "skill_execution"],
             "browser_worker": ["web_research", "browser_automation"],
+            "market_worker": ["market_delivery", "workspace_execution"],
             "verifier": ["verification", "qa"],
         }
 

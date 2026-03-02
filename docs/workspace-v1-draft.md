@@ -23,6 +23,7 @@ Workspace 是 Aura 中用于交付型多代理协作的“审计化工作上下�
 - 不做执行编排仲裁（activator/executor/committee 另管）。
 - 不做本地 merge 策略（仅 PR-only）。
 - 不替代 Git/VCS 本身。
+- 不直接编排 Linear/GitHub 业务 API；外部动作通过 skills 执行，Workspace 只做审计与状态承载。
 
 ## 3. 已确认策略
 
@@ -192,31 +193,55 @@ worktree 建议目录：
   - `workbench_id`
   - `submission_id`（如有）
   - `external_ref`（`pr_url`/`ci_url`/`linear_comment_id`）
+- 外部动作来源约束：
+  - Linear/GitHub 操作由 skills 执行（如 `linear`、`gh-fix-ci`、`gh-address-comments`）。
+  - Workspace 通过 `workspace__register_submission` / `workspace__append_submission_evidence` 挂接这些动作证据。
 
 ## 10. 工具面（v1 最小集合）
+
+暴露策略：
+- 工具暴露按当前 session 的 workspace role 动态收敛（worker 与 integrator 可见面不同）。
+- internal 工具不进入 LLM tool list。
+- LLM 工具执行做“可见面一致性”硬校验：未暴露工具即便被模型输出名称，也会直接拒绝（而不是走审批）。
 
 对所有 agent 暴露：
 - `workspace__context`：读取当前 workspace/workbench 关键上下文。
 - `workspace__register_submission`：登记 commit/pr/ci/tool_call 证据。
+- `workspace__audit_chain`：按 workspace 查询完整交付审计链（workspace/workbenches/submissions/timeline）。
+- `workspace__list_workbenches` / `workspace__list_submissions` / `workspace__timeline`：读取型查询能力。
 
 仅 integrator 暴露：
 - `workspace__accept_submission`
-- `workspace__open_pr`
-- `workspace__merge_pr`
+- `workspace__append_submission_evidence`（补录 skills 产生的外部动作证据，不触发状态迁移）
 - `workspace__advance_issue_state`
+- `workspace__transition_workbench_state`
+- `workspace__recover_expired_workbenches`
+- `workspace__close_workbench`
+- `workspace__close_workspace`
+- `workspace__gc_workbench`
+
+说明：
+- `open_pr/merge_pr` 暂不在 Workspace 内核硬编码实现，继续由 GitHub skills 执行，Workspace 仅做审计承载。
 
 执行器内部调用（不直接给普通 agent）：
 - `workspace__create_or_get`
 - `workspace__provision_workbench`
 - `workspace__heartbeat_workbench`
-- `workspace__close_workbench`
-- `workspace__close_workspace`
+
+语义约束：
+- `workspace__register_submission` / `workspace__accept_submission` 默认只写事实（submission/evidence），不自动推动状态机。
+- 状态推进通过显式工具触发（`workspace__advance_issue_state` / `workspace__transition_workbench_state`），保持 agent 自主决策。
+- internal 工具在运行时由 `caller_kind=system` 强约束，LLM 调用会被硬拒绝。
+- subagent/executor 在需要自动分配 workbench 时，通过 internal 工具以 `caller_kind=system` 执行。
+- 角色判定以运行时上下文为准（`context.workspace_role`），不接受 agent 在工具参数里伪造 `operator_role` 提权。
+- `subagent__run` 的 `workspace_id -> auto provision` 路径仅允许 integrator/system 上下文触发。
 
 ## 11. 权限模型
 
 Worker：
 - 允许：本地编辑、测试、本地 commit、登记 submission。
 - 禁止：push、开 PR、merge、改 Linear 状态。
+- 运行时约束：当 workspace role 是 `worker/reviewer` 时，`shell__run` 会拦截 `git push` / `gh pr create|merge` / `gh api .../pulls...`。
 
 Integrator / Committee：
 - 允许：push、开 PR、merge、issue 状态推进、submission 采纳/驳回。
@@ -254,3 +279,14 @@ Phase 2（集成闭环）：
 Phase 3（规模化与治理）：
 - 租约恢复、冲突自动重试、GC
 - 指标与看板（阻塞率、吞吐、集成时延）
+
+## 15. CLI 运维入口（当前实现）
+
+- `aura workspace create ...`
+  - 创建（或获取）issue 对应的 IssueWorkspace 元数据。
+- `aura workspace provision <workspace_id> --agent-id ... --instance-id ...`
+  - 为 agent 实例分配 Workbench（含 worktree/branch），可选绑定到 session。
+- `aura workspace list [--state ...] [--issue-key ...]`
+  - 列出本地 Workspace 状态，便于快速确认并发运行面。
+- `aura workspace audit <workspace_id> [--timeline-limit N]`
+  - 输出完整审计链 JSON（workspace/workbenches/submissions/timeline）。

@@ -21,6 +21,10 @@
     "tool.market.agents_main.error_diagnostics.error_analysis.v1"
   ],
   "mcp_server_ids": [],
+  "execution": {
+    "mode": "subagent_preset",
+    "preset_name": "market_worker"
+  },
   "metadata": {
     "source_strategy": "shortlist-v1-fused",
     "prompt_ref": "aura/market/catalog/agents/market_fused__csharp-expert.md",

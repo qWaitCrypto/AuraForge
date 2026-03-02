@@ -326,8 +326,9 @@ class ShellRunTool:
         }
     )
 
-    def execute(self, *, args: dict[str, Any], project_root: Path) -> dict[str, Any]:
+    def execute(self, *, args: dict[str, Any], project_root: Path, context: Any | None = None) -> dict[str, Any]:
         command = _require_str(args, "command")
+        _enforce_workspace_shell_policy(command=command, context=context)
         cwd_rel = str(args.get("cwd") or ".")
         cwd_path = _resolve_in_project(project_root, cwd_rel)
         timeout_s = _maybe_float(args, "timeout_s")
@@ -408,3 +409,29 @@ class ShellRunTool:
             "stdout": out,
             "stderr": err,
         }
+
+
+_WORKER_BLOCKED_SHELL_RULES: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"(^|[;&|()]\s*)git\s+push(\s|$)", re.IGNORECASE), "git push"),
+    (re.compile(r"(^|[;&|()]\s*)gh\s+pr\s+(create|merge)(\s|$)", re.IGNORECASE), "gh pr create/merge"),
+    (re.compile(r"(^|[;&|()]\s*)gh\s+api\s+.*?/pulls(?:/|\s|$)", re.IGNORECASE), "gh api pulls"),
+]
+
+
+def _enforce_workspace_shell_policy(*, command: str, context: Any | None) -> None:
+    role_raw = getattr(context, "workspace_role", None)
+    if not isinstance(role_raw, str):
+        return
+    role = role_raw.strip().lower()
+    if not role or role == "integrator":
+        return
+    if role not in {"worker", "reviewer"}:
+        return
+
+    normalized = " ".join(str(command).split())
+    for pattern, blocked_action in _WORKER_BLOCKED_SHELL_RULES:
+        if pattern.search(normalized):
+            raise PermissionError(
+                f"Workspace policy violation: role '{role}' cannot execute '{blocked_action}'. "
+                "Use an integrator workbench for push/PR operations."
+            )

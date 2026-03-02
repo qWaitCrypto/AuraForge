@@ -360,6 +360,7 @@ def run_subagent(
     preset: SubagentPreset,
     task: str,
     extra_context: Any,
+    agent_card_text: str | None = None,
     work_spec: WorkSpec | None = None,
     tool_allowlist: list[str],
     max_turns: int,
@@ -370,6 +371,8 @@ def run_subagent(
     artifact_store: ArtifactStore,
     project_root: Path,
     exec_context: ToolExecutionContext | None,
+    extra_tool_specs: list[ToolSpec] | None = None,
+    external_tool_executors: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Run an isolated delegated task using agno Agent (no Team).
@@ -459,7 +462,15 @@ def run_subagent(
     agno_model = build_aura_agno_model(profile=resolved.profile, project_root=project_root, session_id=session_id)
 
     # Build toolset for the delegated run.
-    all_specs = tool_registry.list_specs() if hasattr(tool_registry, "list_specs") else []
+    all_specs = list(tool_registry.list_specs()) if hasattr(tool_registry, "list_specs") else []
+    if isinstance(extra_tool_specs, list):
+        existing_names = {str(getattr(s, "name", "") or "").strip() for s in all_specs}
+        for spec in extra_tool_specs:
+            name = str(getattr(spec, "name", "") or "").strip()
+            if not name or name in existing_names:
+                continue
+            all_specs.append(spec)
+            existing_names.add(name)
     filtered_specs = _filter_tool_specs(tool_specs=list(all_specs), allowlist=list(tool_allowlist))
     filtered_specs = adapt_tool_specs_for_profile(tools=filtered_specs, profile=resolved.profile)
 
@@ -475,6 +486,7 @@ def run_subagent(
         append_history=subagent_tool_messages.append,
         event_bus=event_bus,
         tool_call_budget=max_tool_calls,
+        external_executors=(external_tool_executors or None),
     )
 
     # Construct system and user messages.
@@ -483,6 +495,13 @@ def run_subagent(
     system_message = preset.load_prompt().rstrip() + (
         "\n\nAllowed tools (enforced by runner):\n" + allowlist_block + "\n"
     )
+    card_text = str(agent_card_text or "").strip()
+    if card_text:
+        system_message = system_message.rstrip() + (
+            "\n\nAgent Card (role profile and operating guidance):\n"
+            + card_text
+            + "\n"
+        )
     system_message = system_message.rstrip() + (
         "\n\nTool call budget:\n"
         f"- max_tool_calls: {int(max_tool_calls)}\n"
@@ -593,6 +612,15 @@ def run_subagent(
         "aura_subagent_run_id": subagent_run_id,
         "aura_subagent_preset": preset.name,
     }
+    if exec_context is not None:
+        if isinstance(exec_context.workspace_id, str) and exec_context.workspace_id:
+            metadata["aura_workspace_id"] = exec_context.workspace_id
+        if isinstance(exec_context.workbench_id, str) and exec_context.workbench_id:
+            metadata["aura_workbench_id"] = exec_context.workbench_id
+        if isinstance(exec_context.worktree_path, str) and exec_context.worktree_path:
+            metadata["aura_worktree_path"] = exec_context.worktree_path
+        if isinstance(exec_context.workspace_role, str) and exec_context.workspace_role:
+            metadata["aura_workspace_role"] = exec_context.workspace_role
     input_messages = [AgnoMessage(role="user", content=user_text)]
 
     with tool_runtime.work_spec_context(work_spec):

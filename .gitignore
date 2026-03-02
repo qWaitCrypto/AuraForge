@@ -2,10 +2,12 @@
 __pycache__/
 *.py[codz]
 *$py.class
-
+tests/
 # C extensions
 *.so
 dev/
+.idea/
+docs/
 .aura/
 # Distribution / packaging
 .Python

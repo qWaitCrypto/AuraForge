@@ -33,6 +33,10 @@ class EventKind(str, Enum):
 
     RUN_PAUSED = "run_paused"
 
+    # Subagent internal approver lifecycle (for delegated tool-approval reasoning).
+    SUBAGENT_APPROVER_STARTED = "subagent_approver_started"
+    SUBAGENT_APPROVER_COMPLETED = "subagent_approver_completed"
+
     # A2A-lite mailbox lifecycle (local agent-to-agent messaging)
     A2A_MESSAGE_ENQUEUED = "a2a_message_enqueued"
     A2A_MESSAGE_DEDUPED = "a2a_message_deduped"

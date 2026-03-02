@@ -96,7 +96,8 @@ def _load_mcp_config_dict(data: Any, *, source: str) -> McpConfig:
         if not isinstance(name, str) or not name.strip():
             continue
         cfg = _as_dict(raw)
-        enabled = _as_bool(cfg.get("enabled", False))
+        # Explicit server entries default to enabled unless disabled by config.
+        enabled = _as_bool(cfg.get("enabled", True))
         command = _as_str(cfg.get("command", ""))
         args = _as_str_list(cfg.get("args", []))
         env = _as_env_dict(cfg.get("env"))

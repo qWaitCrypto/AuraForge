@@ -4,9 +4,9 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from ..models.agent_spec import AgentExecutionMode, AgentSpec
-from ..models.mcp_spec import McpServerSpec
+from ..models.mcp_spec import McpServerSpec, McpTransport
 from ..models.skill_spec import SkillSpec
-from ..models.tool_spec import ToolSpec
+from ..models.tool_spec import ToolEntrypointType, ToolSpec
 from .spec_registry import SpecRegistry
 
 
@@ -49,6 +49,20 @@ class ResolvedAgentBundle:
             out.append(runtime_name)
         return out
 
+    def runnable_tool_runtime_names(self) -> list[str]:
+        out: list[str] = []
+        for spec in self.tools:
+            if spec.entrypoint.type is ToolEntrypointType.UNKNOWN:
+                continue
+            runtime_name = spec.runtime_name if isinstance(spec.runtime_name, str) else spec.name
+            runtime_name = runtime_name.strip()
+            if not runtime_name:
+                continue
+            if runtime_name in out:
+                continue
+            out.append(runtime_name)
+        return out
+
 
 class SpecResolver:
     """
@@ -61,6 +75,22 @@ class SpecResolver:
     @property
     def registry(self) -> SpecRegistry:
         return self._registry
+
+    @staticmethod
+    def _tool_is_runnable(tool: ToolSpec) -> bool:
+        if tool.entrypoint.type is ToolEntrypointType.UNKNOWN:
+            return False
+        return True
+
+    @staticmethod
+    def _mcp_server_is_runnable(server: McpServerSpec) -> bool:
+        if not server.enabled:
+            return False
+        if server.transport is McpTransport.STDIO:
+            return bool(server.command)
+        if server.transport in {McpTransport.HTTP, McpTransport.WS}:
+            return bool(server.endpoint)
+        return False
 
     def resolve_agent(self, identifier: str, *, strict: bool = True) -> ResolvedAgentBundle:
         agent_id = self._registry.resolve_agent_id(identifier)
@@ -106,6 +136,17 @@ class SpecResolver:
                 )
                 continue
             mcp_servers.append(server)
+            if not self._mcp_server_is_runnable(server):
+                issues.append(
+                    ResolutionIssue(
+                        severity=ResolutionSeverity.WARNING,
+                        reference=server.id,
+                        message=(
+                            f"MCP server is not runtime-ready (enabled={server.enabled}, "
+                            f"transport={server.transport.value})."
+                        ),
+                    )
+                )
             for tool_id in server.provided_tool_ids():
                 if tool_id not in tool_ids:
                     tool_ids.append(tool_id)
@@ -122,6 +163,14 @@ class SpecResolver:
                 )
                 continue
             tools.append(tool)
+            if not self._tool_is_runnable(tool):
+                issues.append(
+                    ResolutionIssue(
+                        severity=ResolutionSeverity.WARNING,
+                        reference=tool.id,
+                        message=f"Tool is template-only or not runtime-ready (entrypoint={tool.entrypoint.type.value}).",
+                    )
+                )
 
         bundle = ResolvedAgentBundle(
             agent=agent,
@@ -145,4 +194,3 @@ class SpecResolver:
         if not bundle.agent.execution.preset_name:
             raise SpecResolutionError(f"Agent {bundle.agent.id} is missing execution.preset_name.")
         return bundle
-

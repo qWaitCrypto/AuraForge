@@ -27,6 +27,13 @@ class ToolRuntimeError(RuntimeError):
     pass
 
 
+_INTERNAL_ONLY_TOOL_NAMES: set[str] = {
+    "workspace__create_or_get",
+    "workspace__provision_workbench",
+    "workspace__heartbeat_workbench",
+}
+
+
 def _elide_tail(s: str, max_chars: int) -> str:
     if max_chars <= 0:
         return ""
@@ -273,6 +280,7 @@ class PlannedToolCall:
     tool_name: str
     arguments: dict[str, Any]
     arguments_ref: ArtifactRef
+    caller_kind: str = "llm"
 
 
 @dataclass(frozen=True, slots=True)
@@ -289,6 +297,11 @@ class ToolExecutionContext:
     turn_id: str | None
     tool_execution_id: str
     event_bus: EventBus | None = None
+    workspace_id: str | None = None
+    workbench_id: str | None = None
+    worktree_path: str | None = None
+    workspace_role: str | None = None
+    caller_kind: str | None = None
 
 
 class ToolRuntime:
@@ -334,7 +347,15 @@ class ToolRuntime:
         finally:
             self._work_spec_var.reset(token)
 
-    def plan(self, *, tool_execution_id: str, tool_name: str, tool_call_id: str, arguments: dict[str, Any]) -> PlannedToolCall:
+    def plan(
+        self,
+        *,
+        tool_execution_id: str,
+        tool_name: str,
+        tool_call_id: str,
+        arguments: dict[str, Any],
+        caller_kind: str = "llm",
+    ) -> PlannedToolCall:
         if not tool_call_id:
             raise ToolRuntimeError("Tool call is missing tool_call_id; cannot return tool_result.")
         if not tool_name:
@@ -353,6 +374,7 @@ class ToolRuntime:
             tool_name=tool_name,
             arguments=arguments,
             arguments_ref=args_ref,
+            caller_kind=str(caller_kind or "llm").strip().lower() or "llm",
         )
 
     def _inspect_work_spec_scope(self, planned: PlannedToolCall) -> InspectionResult | None:
@@ -424,8 +446,8 @@ class ToolRuntime:
                 if isinstance(host, str) and host and not _domain_allowed(host):
                     diff_ref = self._build_args_preview(planned, summary="Preview for blocked browser__run (WorkSpec)")
                     return InspectionResult(
-                        decision=InspectionDecision.REQUIRE_APPROVAL,
-                        action_summary="Blocked browser automation outside domain allowlist",
+                        decision=InspectionDecision.DENY,
+                        action_summary="Denied browser automation outside domain allowlist",
                         risk_level="high",
                         reason=f"WorkSpec scope violation: domain not in allowlist: {host}",
                         error_code=ErrorCode.PERMISSION,
@@ -510,8 +532,8 @@ class ToolRuntime:
             if not _path_allowed(rel):
                 diff_ref = self._build_args_preview(planned, summary="Preview for blocked path (WorkSpec)")
                 return InspectionResult(
-                    decision=InspectionDecision.REQUIRE_APPROVAL,
-                    action_summary="Blocked path outside workspace scope",
+                    decision=InspectionDecision.DENY,
+                    action_summary="Denied path outside workspace scope",
                     risk_level="high",
                     reason=f"WorkSpec scope violation: path not in workspace_roots: {rel}",
                     error_code=ErrorCode.PERMISSION,
@@ -522,8 +544,8 @@ class ToolRuntime:
             if not _file_type_allowed(rel):
                 diff_ref = self._build_args_preview(planned, summary="Preview for blocked file type (WorkSpec)")
                 return InspectionResult(
-                    decision=InspectionDecision.REQUIRE_APPROVAL,
-                    action_summary="Blocked file type outside allowlist",
+                    decision=InspectionDecision.DENY,
+                    action_summary="Denied file type outside allowlist",
                     risk_level="high",
                     reason=f"WorkSpec scope violation: file type not in allowlist: {rel}",
                     error_code=ErrorCode.PERMISSION,
@@ -541,6 +563,29 @@ class ToolRuntime:
                 risk_level="high",
                 reason="Tool is not registered.",
                 error_code=ErrorCode.TOOL_UNKNOWN,
+            )
+
+        caller_kind = str(getattr(planned, "caller_kind", "llm") or "llm").strip().lower()
+        if caller_kind not in {"llm", "system"}:
+            caller_kind = "llm"
+        if planned.tool_name in _INTERNAL_ONLY_TOOL_NAMES and caller_kind != "system":
+            diff_ref = self._build_args_preview(planned, summary=f"Preview for blocked {planned.tool_name}")
+            return InspectionResult(
+                decision=InspectionDecision.DENY,
+                action_summary=f"Internal tool denied: {planned.tool_name}",
+                risk_level="high",
+                reason="This tool is reserved for executor/system orchestration and is not callable by LLM.",
+                error_code=ErrorCode.PERMISSION,
+                diff_ref=diff_ref,
+            )
+        if planned.tool_name in _INTERNAL_ONLY_TOOL_NAMES and caller_kind == "system":
+            return InspectionResult(
+                decision=InspectionDecision.ALLOW,
+                action_summary=f"Execute internal system tool: {planned.tool_name}",
+                risk_level="high",
+                reason="Internal tool call from system executor path.",
+                error_code=None,
+                diff_ref=None,
             )
 
         work_spec_violation = self._inspect_work_spec_scope(planned)
@@ -628,6 +673,34 @@ class ToolRuntime:
                 diff_ref=diff_ref,
             )
 
+        if tool_name in {
+            "workspace__create_or_get",
+            "workspace__provision_workbench",
+            "workspace__publish_heartbeat",
+            "workspace__submit_claim",
+            "workspace__award_claim",
+            "workspace__wake_awarded_agent",
+            "workspace__register_submission",
+            "workspace__heartbeat_workbench",
+            "workspace__accept_submission",
+            "workspace__append_submission_evidence",
+            "workspace__advance_issue_state",
+            "workspace__transition_workbench_state",
+            "workspace__close_workbench",
+            "workspace__close_workspace",
+            "workspace__gc_workbench",
+            "workspace__recover_expired_workbenches",
+        }:
+            diff_ref = self._build_args_preview(planned, summary=f"Preview for {tool_name}")
+            return InspectionResult(
+                decision=InspectionDecision.REQUIRE_APPROVAL,
+                action_summary=f"Execute tool: {tool_name}",
+                risk_level="high",
+                reason="Workspace lifecycle tools mutate local state/worktrees and require approval in standard mode.",
+                error_code=None,
+                diff_ref=diff_ref,
+            )
+
         if planned.tool_name == "shell__run":
             summary = _summarize_shell_run_args(planned.arguments)
             try:
@@ -710,6 +783,17 @@ class ToolRuntime:
                 risk_level="high",
                 reason=str(e),
                 error_code=ErrorCode.BAD_REQUEST,
+                diff_ref=None,
+            )
+
+        if self._approval_mode is ToolApprovalMode.TRUSTED:
+            cmds = ", ".join(step[0] for step in steps if step)
+            return InspectionResult(
+                decision=InspectionDecision.ALLOW,
+                action_summary=(f"Run browser automation: {cmds}" if cmds else "Run browser automation"),
+                risk_level="high",
+                reason="Approval mode is trusted (auto-allow).",
+                error_code=None,
                 diff_ref=None,
             )
 

@@ -246,6 +246,7 @@ def _planned_tool_call_descriptor(planned: PlannedToolCall) -> dict[str, Any]:
         "tool_name": planned.tool_name,
         "tool_call_id": planned.tool_call_id,
         "arguments_ref": planned.arguments_ref.to_dict(),
+        "caller_kind": str(getattr(planned, "caller_kind", "llm") or "llm"),
     }
 
 
@@ -253,6 +254,7 @@ def _planned_tool_call_from_descriptor(raw: dict[str, Any], *, read_artifact_tex
     tool_execution_id = str(raw.get("tool_execution_id") or "")
     tool_name = str(raw.get("tool_name") or "")
     tool_call_id = str(raw.get("tool_call_id") or "")
+    caller_kind = str(raw.get("caller_kind") or "llm").strip().lower() or "llm"
     args_ref_raw = raw.get("arguments_ref")
     if not tool_execution_id or not tool_name or not tool_call_id or not isinstance(args_ref_raw, dict):
         raise ValueError("Missing required tool call fields.")
@@ -268,6 +270,7 @@ def _planned_tool_call_from_descriptor(raw: dict[str, Any], *, read_artifact_tex
         tool_call_id=tool_call_id,
         arguments=args_any,
         arguments_ref=_ArtifactRef.from_dict(args_ref_raw),
+        caller_kind=caller_kind,
     )
 
 
