@@ -5,7 +5,7 @@ import json
 import os
 import shutil
 import sys
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -373,6 +373,38 @@ def _build_parser() -> argparse.ArgumentParser:
     sandbox_destroy_parser = sandbox_subparsers.add_parser("destroy", help="Destroy one sandbox.")
     sandbox_destroy_parser.add_argument("sandbox_id", help="Sandbox id.")
     sandbox_destroy_parser.set_defaults(func=_cmd_sandbox_destroy)
+
+    dispatch_parser = subparsers.add_parser("dispatch", help="Dispatch one issue to agent(s).")
+    dispatch_parser.add_argument("--issue-key", dest="issue_key", required=True, help="Issue key (e.g. PRJ-1).")
+    dispatch_parser.add_argument("--brief", dest="brief", required=True, help="Task brief (<= 200 chars).")
+    dispatch_parser.add_argument("--agent-id", dest="agent_id", default=None, help="Optional target agent id.")
+    dispatch_parser.add_argument("--base-branch", dest="base_branch", default="main", help="Base branch (default: main).")
+    dispatch_parser.add_argument(
+        "--assign",
+        dest="assign",
+        action="store_true",
+        help="Use TASK_ASSIGNED path (create sandbox + send task_assigned signal).",
+    )
+    dispatch_parser.set_defaults(func=_cmd_dispatch)
+
+    status_parser = subparsers.add_parser("status", help="Show control-plane status.")
+    status_parser.add_argument("agent_id", nargs="?", default=None, help="Optional single agent id.")
+    status_parser.set_defaults(func=_cmd_status)
+
+    policy_parser = subparsers.add_parser("policy", help="Manage control policy.")
+    policy_subparsers = policy_parser.add_subparsers(dest="policy_cmd", required=True)
+    policy_show_parser = policy_subparsers.add_parser("show", help="Show current policy as JSON.")
+    policy_show_parser.set_defaults(func=_cmd_policy_show)
+    policy_set_parser = policy_subparsers.add_parser("set", help="Set one policy field.")
+    policy_set_parser.add_argument("key", help="Policy key.")
+    policy_set_parser.add_argument("value", help="Policy value.")
+    policy_set_parser.set_defaults(func=_cmd_policy_set)
+
+    recover_parser = subparsers.add_parser("recover", help="Run manual recovery operations.")
+    recover_subparsers = recover_parser.add_subparsers(dest="recover_cmd", required=True)
+    recover_kill_parser = recover_subparsers.add_parser("kill", help="Force destroy one sandbox.")
+    recover_kill_parser.add_argument("sandbox_id", help="Sandbox id.")
+    recover_kill_parser.set_defaults(func=_cmd_recover_kill)
 
     debug_parser = subparsers.add_parser("debug", help="Debug utilities.")
     debug_subparsers = debug_parser.add_subparsers(dest="debug_cmd", required=True)
@@ -1551,6 +1583,183 @@ def _cmd_session_resume(args: argparse.Namespace) -> int:
     return _cmd_chat(args2)
 
 
+def _load_control_plane():
+    from .runtime.control import build_control_plane
+    from .runtime.project import RuntimePaths
+
+    try:
+        paths = RuntimePaths.discover()
+    except FileNotFoundError as e:
+        return None, str(e), EXIT_CONFIG_ERROR
+    try:
+        control = build_control_plane(project_root=paths.project_root)
+    except Exception as e:
+        return None, str(e), EXIT_ERROR
+    return control, None, EXIT_OK
+
+
+def _cmd_dispatch(args: argparse.Namespace) -> int:
+    from .runtime.control import DispatchRequest
+    from .runtime.models.signal import SignalType
+
+    control, error, code = _load_control_plane()
+    if control is None:
+        print(str(error), file=sys.stderr)
+        return code
+
+    issue_key = str(getattr(args, "issue_key", "") or "").strip()
+    brief = str(getattr(args, "brief", "") or "").strip()
+    agent_id_raw = getattr(args, "agent_id", None)
+    agent_id = str(agent_id_raw).strip() if isinstance(agent_id_raw, str) and agent_id_raw.strip() else None
+    base_branch = str(getattr(args, "base_branch", "main") or "main").strip() or "main"
+    assign = bool(getattr(args, "assign", False))
+
+    signal_type = SignalType.TASK_ASSIGNED if assign else SignalType.WAKE
+    request = DispatchRequest(
+        issue_key=issue_key,
+        brief=brief,
+        signal_type=signal_type,
+        agent_id=agent_id,
+        base_branch=base_branch,
+    )
+    result = control.dispatcher.dispatch(request)
+    print(json.dumps(asdict(result), ensure_ascii=False, indent=2, sort_keys=True))
+    return EXIT_OK if result.dispatched else EXIT_DENIED
+
+
+def _cmd_status(args: argparse.Namespace) -> int:
+    control, error, code = _load_control_plane()
+    if control is None:
+        print(str(error), file=sys.stderr)
+        return code
+    policy = control.policy_gate.load_policy()
+
+    agent_id_raw = getattr(args, "agent_id", None)
+    agent_id = str(agent_id_raw).strip() if isinstance(agent_id_raw, str) and agent_id_raw.strip() else None
+    if agent_id is not None:
+        record = control.status_tracker.refresh(
+            agent_id,
+            sandbox_idle_timeout_ms=policy.sandbox_idle_timeout_ms,
+        )
+        print(json.dumps(record.model_dump(mode="json"), ensure_ascii=False, indent=2, sort_keys=True))
+        return EXIT_OK
+
+    control.status_tracker.refresh_all(sandbox_idle_timeout_ms=policy.sandbox_idle_timeout_ms)
+    rows = control.status_tracker.list_all()
+    if not rows:
+        print("No agents found.")
+        return EXIT_OK
+    print("agent_id\tstate\tactive_issue_keys\tpending_signal_count\tfailure_count_24h")
+    for row in rows:
+        issues = ",".join(row.active_issue_keys)
+        print(
+            f"{row.agent_id}\t{row.state.value}\t{issues}\t"
+            f"{row.pending_signal_count}\t{row.failure_count_24h}"
+        )
+    return EXIT_OK
+
+
+def _cmd_policy_show(_: argparse.Namespace) -> int:
+    control, error, code = _load_control_plane()
+    if control is None:
+        print(str(error), file=sys.stderr)
+        return code
+    policy = control.policy_gate.load_policy()
+    print(json.dumps(policy.model_dump(mode="json"), ensure_ascii=False, indent=2, sort_keys=True))
+    return EXIT_OK
+
+
+def _cmd_policy_set(args: argparse.Namespace) -> int:
+    control, error, code = _load_control_plane()
+    if control is None:
+        print(str(error), file=sys.stderr)
+        return code
+
+    key = str(getattr(args, "key", "") or "").strip()
+    raw_value = str(getattr(args, "value", "") or "").strip()
+    if not key:
+        print("key is required.", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+    if not raw_value:
+        print("value is required.", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+
+    policy = control.policy_gate.load_policy()
+    if key not in type(policy).model_fields:
+        print(f"Unknown policy key: {key}", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+
+    try:
+        parsed_value = json.loads(raw_value)
+    except Exception:
+        parsed_value = raw_value
+    try:
+        updated = policy.model_copy(update={key: parsed_value})
+        # Force validation before persisting.
+        updated = type(policy).model_validate(updated.model_dump(mode="python"))
+    except Exception as e:
+        print(f"Invalid policy value: {e}", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+
+    control.policy_gate.save_policy(updated)
+    print(json.dumps(updated.model_dump(mode="json"), ensure_ascii=False, indent=2, sort_keys=True))
+    return EXIT_OK
+
+
+def _cmd_recover_kill(args: argparse.Namespace) -> int:
+    from .runtime.models.event_log import LogEvent, LogEventKind
+
+    control, error, code = _load_control_plane()
+    if control is None:
+        print(str(error), file=sys.stderr)
+        return code
+
+    sandbox_id = str(getattr(args, "sandbox_id", "") or "").strip()
+    if not sandbox_id:
+        print("sandbox_id is required.", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+
+    sandbox = control.sandbox_manager.get(sandbox_id)
+    try:
+        control.sandbox_manager.destroy(sandbox_id)
+    except Exception as e:
+        control.event_log.record(
+            LogEvent(
+                event_id=new_id("evt"),
+                session_id=f"recover:{sandbox_id}",
+                agent_id=sandbox.agent_id if sandbox is not None else "operator",
+                sandbox_id=sandbox_id,
+                issue_key=sandbox.issue_key if sandbox is not None else None,
+                kind=LogEventKind.TOOL_CALL,
+                tool_name="recover__kill",
+                tool_args_summary=f"sandbox_id={sandbox_id}",
+                tool_result_summary=str(e),
+                tool_ok=False,
+                external_refs=[f"sandbox:{sandbox_id}"],
+            )
+        )
+        print(str(e), file=sys.stderr)
+        return EXIT_ERROR
+
+    control.event_log.record(
+        LogEvent(
+            event_id=new_id("evt"),
+            session_id=f"recover:{sandbox_id}",
+            agent_id=sandbox.agent_id if sandbox is not None else "operator",
+            sandbox_id=sandbox_id,
+            issue_key=sandbox.issue_key if sandbox is not None else None,
+            kind=LogEventKind.TOOL_CALL,
+            tool_name="recover__kill",
+            tool_args_summary=f"sandbox_id={sandbox_id}",
+            tool_result_summary="manual_kill",
+            tool_ok=True,
+            external_refs=[f"sandbox:{sandbox_id}"],
+        )
+    )
+    print(json.dumps({"ok": True, "sandbox_id": sandbox_id}, ensure_ascii=False, indent=2, sort_keys=True))
+    return EXIT_OK
+
+
 def _cmd_sandbox_create(args: argparse.Namespace) -> int:
     from .runtime.project import RuntimePaths
     from .runtime.sandbox import SandboxManager
@@ -2088,6 +2297,7 @@ def _cmd_init(args: argparse.Namespace) -> int:
         project_root / ".aura" / "state" / "signals",
         project_root / ".aura" / "state" / "signals" / "inbox",
         project_root / ".aura" / "state" / "signals" / "archive",
+        project_root / ".aura" / "state" / "control",
         project_root / ".aura" / "index",
         project_root / ".aura" / "cache",
         project_root / ".aura" / "tmp",

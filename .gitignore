@@ -3,6 +3,7 @@ __pycache__/
 *.py[codz]
 *$py.class
 tests/
+artifacts/
 # C extensions
 *.so
 dev/
