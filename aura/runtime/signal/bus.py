@@ -87,6 +87,8 @@ class SignalBus:
         signal_type: SignalType | None = None,
         issue_key: str | None = None,
         since_ms: int | None = None,
+        include_consumed: bool = True,
+        include_archive: bool = True,
         limit: int = 100,
     ) -> list[Signal]:
         return self.store.query_all(
@@ -95,5 +97,10 @@ class SignalBus:
             signal_type=signal_type,
             issue_key=issue_key,
             since_ms=since_ms,
+            include_consumed=include_consumed,
+            include_archive=include_archive,
             limit=limit,
         )
+
+    def find_signal(self, signal_id: str) -> Signal | None:
+        return self.store.find_by_id(signal_id)

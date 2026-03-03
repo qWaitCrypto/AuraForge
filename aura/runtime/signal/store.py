@@ -213,11 +213,15 @@ class SignalStore:
         signal_type: SignalType | None = None,
         issue_key: str | None = None,
         since_ms: int | None = None,
+        include_consumed: bool = True,
+        include_archive: bool = True,
         limit: int = 100,
     ) -> list[Signal]:
         items_by_id: dict[str, Signal] = {}
 
-        paths = [*sorted(self._inbox.glob("*.jsonl")), *sorted(self._archive.glob("*.jsonl"))]
+        paths = [*sorted(self._inbox.glob("*.jsonl"))]
+        if include_archive:
+            paths.extend(sorted(self._archive.glob("*.jsonl")))
         for path in paths:
             for line in path.read_text(encoding="utf-8").splitlines():
                 if not line.strip():
@@ -235,6 +239,8 @@ class SignalStore:
                 if issue_key is not None and signal.issue_key != issue_key:
                     continue
                 if since_ms is not None and signal.created_at < since_ms:
+                    continue
+                if not include_consumed and signal.consumed:
                     continue
                 existing = items_by_id.get(signal.signal_id)
                 if existing is None:

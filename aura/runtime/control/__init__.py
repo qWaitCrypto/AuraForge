@@ -8,7 +8,9 @@ from ..sandbox import SandboxManager
 from ..signal import SignalBus, SignalStore
 from .agent_status import AgentStatusTracker
 from .dispatcher import DispatchRequest, DispatchResult, Dispatcher
+from .health_probe import HealthProbe, ProbeIssue, ProbeIssueKind, ProbeReport
 from .policy import ControlPolicy, PolicyCheckResult, PolicyGate
+from .recovery import RecoveryAction, RecoveryManager, RecoveryRecord
 
 
 @dataclass(slots=True)
@@ -19,6 +21,8 @@ class ControlPlane:
     status_tracker: AgentStatusTracker
     policy_gate: PolicyGate
     dispatcher: Dispatcher
+    health_probe: HealthProbe
+    recovery_manager: RecoveryManager
 
 
 def build_control_plane(*, project_root: Path) -> ControlPlane:
@@ -42,6 +46,20 @@ def build_control_plane(*, project_root: Path) -> ControlPlane:
         sandbox_manager=sandbox_manager,
         policy_gate=policy_gate,
     )
+    health_probe = HealthProbe(
+        project_root=root,
+        status_tracker=status_tracker,
+        signal_bus=signal_bus,
+        policy_gate=policy_gate,
+    )
+    recovery_manager = RecoveryManager(
+        project_root=root,
+        sandbox_manager=sandbox_manager,
+        signal_bus=signal_bus,
+        status_tracker=status_tracker,
+        policy_gate=policy_gate,
+        event_log=event_log,
+    )
     return ControlPlane(
         event_log=event_log,
         signal_bus=signal_bus,
@@ -49,6 +67,8 @@ def build_control_plane(*, project_root: Path) -> ControlPlane:
         status_tracker=status_tracker,
         policy_gate=policy_gate,
         dispatcher=dispatcher,
+        health_probe=health_probe,
+        recovery_manager=recovery_manager,
     )
 
 
@@ -59,7 +79,14 @@ __all__ = [
     "DispatchRequest",
     "DispatchResult",
     "Dispatcher",
+    "HealthProbe",
     "PolicyCheckResult",
     "PolicyGate",
+    "ProbeIssue",
+    "ProbeIssueKind",
+    "ProbeReport",
+    "RecoveryAction",
+    "RecoveryManager",
+    "RecoveryRecord",
     "build_control_plane",
 ]

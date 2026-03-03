@@ -113,7 +113,10 @@ class PolicyGate:
                 reason=f"policy:max_sandboxes_per_issue:{issue_active_count}/{policy.max_sandboxes_per_issue}",
             )
 
-        if agent_record.failure_count_24h >= policy.max_failures_per_agent_24h:
+        if (
+            policy.max_failures_per_agent_24h > 0
+            and agent_record.failure_count_24h >= policy.max_failures_per_agent_24h
+        ):
             return PolicyCheckResult(
                 allowed=False,
                 reason=(

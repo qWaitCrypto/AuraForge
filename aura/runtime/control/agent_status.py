@@ -143,8 +143,6 @@ class AgentStatusTracker:
         failure_count_24h = sum(1 for item in events if item.timestamp >= since_ts and item.tool_ok is False)
 
         cooling_until_ts = previous.cooling_until_ts if previous is not None else None
-        if isinstance(cooling_until_ts, int) and cooling_until_ts <= now:
-            cooling_until_ts = None
 
         idle_timeout_ms = _DEFAULT_SANDBOX_IDLE_TIMEOUT_MS
         if isinstance(sandbox_idle_timeout_ms, int) and sandbox_idle_timeout_ms > 0:
@@ -220,6 +218,29 @@ class AgentStatusTracker:
             update={
                 "state": AgentState.COOLING,
                 "cooling_until_ts": cooling_until,
+                "updated_at": now,
+            }
+        )
+        snapshot[agent] = updated
+        self._write_snapshot(snapshot)
+
+    def clear_cooling(self, agent_id: str) -> None:
+        agent = str(agent_id or "").strip()
+        if not agent:
+            raise ValueError("agent_id must be a non-empty string.")
+
+        snapshot = self._load_snapshot()
+        current = snapshot.get(agent)
+        if current is None:
+            # Create baseline record so clear operation is idempotent.
+            current = self.refresh(agent)
+            snapshot = self._load_snapshot()
+
+        now = now_ts_ms()
+        updated = current.model_copy(
+            update={
+                "state": AgentState.IDLE,
+                "cooling_until_ts": None,
                 "updated_at": now,
             }
         )

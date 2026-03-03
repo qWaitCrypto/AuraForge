@@ -400,11 +400,46 @@ def _build_parser() -> argparse.ArgumentParser:
     policy_set_parser.add_argument("value", help="Policy value.")
     policy_set_parser.set_defaults(func=_cmd_policy_set)
 
+    probe_parser = subparsers.add_parser("probe", help="Run control-plane health probes.")
+    probe_parser.add_argument(
+        "--auto-recover",
+        dest="auto_recover",
+        action="store_true",
+        help="Run auto recovery after probe.",
+    )
+    probe_subparsers = probe_parser.add_subparsers(dest="probe_cmd", required=False)
+    probe_mcp_parser = probe_subparsers.add_parser("mcp", help="Probe one MCP server.")
+    probe_mcp_parser.add_argument("server_name", help="Configured MCP server name.")
+    probe_mcp_parser.set_defaults(func=_cmd_probe_mcp)
+    probe_parser.set_defaults(func=_cmd_probe)
+
     recover_parser = subparsers.add_parser("recover", help="Run manual recovery operations.")
     recover_subparsers = recover_parser.add_subparsers(dest="recover_cmd", required=True)
     recover_kill_parser = recover_subparsers.add_parser("kill", help="Force destroy one sandbox.")
     recover_kill_parser.add_argument("sandbox_id", help="Sandbox id.")
     recover_kill_parser.set_defaults(func=_cmd_recover_kill)
+    recover_dead_letters_parser = recover_subparsers.add_parser(
+        "dead-letters",
+        help="List dead letter signals.",
+    )
+    recover_dead_letters_parser.set_defaults(func=_cmd_recover_dead_letters)
+    recover_resend_parser = recover_subparsers.add_parser("resend", help="Resend WAKE signal for one issue.")
+    recover_resend_parser.add_argument("issue_key", help="Issue key.")
+    recover_resend_parser.add_argument("--agent-id", dest="agent_id", required=True, help="Agent id.")
+    recover_resend_parser.add_argument("--brief", dest="brief", default="wake", help="Optional signal brief.")
+    recover_resend_parser.add_argument("--reason", dest="reason", default="manual_resend", help="Resend reason.")
+    recover_resend_parser.set_defaults(func=_cmd_recover_resend)
+    recover_takeover_parser = recover_subparsers.add_parser("takeover", help="Manually takeover one issue.")
+    recover_takeover_parser.add_argument("issue_key", help="Issue key.")
+    recover_takeover_parser.add_argument("--agent-id", dest="agent_id", required=True, help="New owner agent id.")
+    recover_takeover_parser.add_argument(
+        "--base-branch",
+        dest="base_branch",
+        default=None,
+        help="Optional base branch override (defaults to previous sandbox branch or repo default).",
+    )
+    recover_takeover_parser.add_argument("--reason", dest="reason", default="manual_takeover", help="Takeover reason.")
+    recover_takeover_parser.set_defaults(func=_cmd_recover_takeover)
 
     debug_parser = subparsers.add_parser("debug", help="Debug utilities.")
     debug_subparsers = debug_parser.add_subparsers(dest="debug_cmd", required=True)
@@ -1707,8 +1742,6 @@ def _cmd_policy_set(args: argparse.Namespace) -> int:
 
 
 def _cmd_recover_kill(args: argparse.Namespace) -> int:
-    from .runtime.models.event_log import LogEvent, LogEventKind
-
     control, error, code = _load_control_plane()
     if control is None:
         print(str(error), file=sys.stderr)
@@ -1719,45 +1752,173 @@ def _cmd_recover_kill(args: argparse.Namespace) -> int:
         print("sandbox_id is required.", file=sys.stderr)
         return EXIT_VALIDATION_FAILED
 
-    sandbox = control.sandbox_manager.get(sandbox_id)
-    try:
-        control.sandbox_manager.destroy(sandbox_id)
-    except Exception as e:
-        control.event_log.record(
-            LogEvent(
-                event_id=new_id("evt"),
-                session_id=f"recover:{sandbox_id}",
-                agent_id=sandbox.agent_id if sandbox is not None else "operator",
-                sandbox_id=sandbox_id,
-                issue_key=sandbox.issue_key if sandbox is not None else None,
-                kind=LogEventKind.TOOL_CALL,
-                tool_name="recover__kill",
-                tool_args_summary=f"sandbox_id={sandbox_id}",
-                tool_result_summary=str(e),
-                tool_ok=False,
-                external_refs=[f"sandbox:{sandbox_id}"],
-            )
-        )
-        print(str(e), file=sys.stderr)
+    record = control.recovery_manager.kill_sandbox(sandbox_id, reason="manual_kill")
+    if not record.ok:
+        print(str(record.error or record.outcome), file=sys.stderr)
         return EXIT_ERROR
 
-    control.event_log.record(
-        LogEvent(
-            event_id=new_id("evt"),
-            session_id=f"recover:{sandbox_id}",
-            agent_id=sandbox.agent_id if sandbox is not None else "operator",
-            sandbox_id=sandbox_id,
-            issue_key=sandbox.issue_key if sandbox is not None else None,
-            kind=LogEventKind.TOOL_CALL,
-            tool_name="recover__kill",
-            tool_args_summary=f"sandbox_id={sandbox_id}",
-            tool_result_summary="manual_kill",
-            tool_ok=True,
-            external_refs=[f"sandbox:{sandbox_id}"],
-        )
-    )
     print(json.dumps({"ok": True, "sandbox_id": sandbox_id}, ensure_ascii=False, indent=2, sort_keys=True))
     return EXIT_OK
+
+
+def _render_probe_issues(*, issues: list[dict]) -> None:
+    if not issues:
+        print("all healthy")
+        return
+    print("kind\tagent_id\tsandbox_id\tsignal_id\tissue_key\tdetail")
+    for item in issues:
+        print(
+            f"{item.get('kind','')}\t{item.get('agent_id','')}\t{item.get('sandbox_id','')}\t"
+            f"{item.get('signal_id','')}\t{item.get('issue_key','')}\t{item.get('detail','')}"
+        )
+
+
+def _cmd_probe(args: argparse.Namespace) -> int:
+    control, error, code = _load_control_plane()
+    if control is None:
+        print(str(error), file=sys.stderr)
+        return code
+
+    report = control.health_probe.probe()
+    payload = report.model_dump(mode="json")
+    _render_probe_issues(issues=list(payload.get("issues", [])))
+
+    if bool(getattr(args, "auto_recover", False)):
+        records = control.recovery_manager.auto_recover(report)
+        if records:
+            print("\nrecovery:")
+            for record in records:
+                print(
+                    f"{record.action.value}\tok={record.ok}\toutcome={record.outcome}"
+                    f"\tagent={record.agent_id or ''}\tissue={record.issue_key or ''}"
+                )
+    return EXIT_OK
+
+
+def _cmd_probe_mcp(args: argparse.Namespace) -> int:
+    control, error, code = _load_control_plane()
+    if control is None:
+        print(str(error), file=sys.stderr)
+        return code
+
+    server_name = str(getattr(args, "server_name", "") or "").strip()
+    if not server_name:
+        print("server_name is required.", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+
+    issue = control.health_probe.probe_mcp(server_name)
+    if issue is None:
+        print(json.dumps({"ok": True, "server": server_name}, ensure_ascii=False, indent=2, sort_keys=True))
+        return EXIT_OK
+
+    print(
+        json.dumps(
+            {"ok": False, "server": server_name, "issue": issue.model_dump(mode="json")},
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return EXIT_ERROR
+
+
+def _cmd_recover_dead_letters(_: argparse.Namespace) -> int:
+    control, error, code = _load_control_plane()
+    if control is None:
+        print(str(error), file=sys.stderr)
+        return code
+
+    letters = control.recovery_manager.list_dead_letters()
+    if not letters:
+        print("No dead letters.")
+        return EXIT_OK
+    for item in letters:
+        signal = item.get("signal") if isinstance(item.get("signal"), dict) else {}
+        issue_key = signal.get("issue_key", "")
+        brief = signal.get("brief", "")
+        signal_id = signal.get("signal_id", "")
+        print(f"{signal_id}\tissue={issue_key}\tbrief={brief}")
+    return EXIT_OK
+
+
+def _cmd_recover_resend(args: argparse.Namespace) -> int:
+    control, error, code = _load_control_plane()
+    if control is None:
+        print(str(error), file=sys.stderr)
+        return code
+
+    issue_key = str(getattr(args, "issue_key", "") or "").strip()
+    agent_id = str(getattr(args, "agent_id", "") or "").strip()
+    brief = str(getattr(args, "brief", "wake") or "wake").strip() or "wake"
+    reason = str(getattr(args, "reason", "manual_resend") or "manual_resend").strip() or "manual_resend"
+    if not issue_key or not agent_id:
+        print("issue_key and --agent-id are required.", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+
+    record = control.recovery_manager.resend_signal(
+        issue_key=issue_key,
+        agent_id=agent_id,
+        brief=brief,
+        reason=reason,
+        old_signal_id=None,
+    )
+    print(
+        json.dumps(
+            {
+                "ok": record.ok,
+                "action": record.action.value,
+                "issue_key": record.issue_key,
+                "agent_id": record.agent_id,
+                "signal_id": record.new_signal_id or record.signal_id,
+                "error": record.error,
+            },
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return EXIT_OK if record.ok else EXIT_ERROR
+
+
+def _cmd_recover_takeover(args: argparse.Namespace) -> int:
+    control, error, code = _load_control_plane()
+    if control is None:
+        print(str(error), file=sys.stderr)
+        return code
+
+    issue_key = str(getattr(args, "issue_key", "") or "").strip()
+    agent_id = str(getattr(args, "agent_id", "") or "").strip()
+    base_branch_raw = getattr(args, "base_branch", None)
+    base_branch = str(base_branch_raw).strip() if isinstance(base_branch_raw, str) and base_branch_raw.strip() else None
+    reason = str(getattr(args, "reason", "manual_takeover") or "manual_takeover").strip() or "manual_takeover"
+    if not issue_key or not agent_id:
+        print("issue_key and --agent-id are required.", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+
+    record = control.recovery_manager.manual_takeover(
+        issue_key,
+        new_agent_id=agent_id,
+        base_branch=base_branch,
+        operator="manual",
+        reason=reason,
+    )
+    print(
+        json.dumps(
+            {
+                "ok": record.ok,
+                "action": record.action.value,
+                "issue_key": record.issue_key,
+                "agent_id": record.agent_id,
+                "sandbox_id": record.sandbox_id,
+                "signal_id": record.new_signal_id or record.signal_id,
+                "error": record.error,
+            },
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return EXIT_OK if record.ok else EXIT_ERROR
 
 
 def _cmd_sandbox_create(args: argparse.Namespace) -> int:
