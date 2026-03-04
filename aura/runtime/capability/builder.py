@@ -4,6 +4,7 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
+from ..control.circuit_breaker import CircuitBreaker, CircuitOpenError, get_shared_circuit_breaker
 from ..ids import new_id
 from ..llm.types import ToolSpec as LlmToolSpec
 from ..mcp.config import load_mcp_config
@@ -62,10 +63,12 @@ class CapabilityBuilder:
         spec_resolver: SpecResolver,
         tool_registry: ToolRegistry,
         project_root: Path,
+        circuit_breaker: CircuitBreaker | None = None,
     ) -> None:
         self._resolver = spec_resolver
         self._registry = tool_registry
         self._project_root = project_root.expanduser().resolve()
+        self._circuit_breaker = circuit_breaker or get_shared_circuit_breaker(project_root=self._project_root)
 
     def build(
         self,
@@ -280,8 +283,8 @@ class CapabilityBuilder:
 
         return extra_specs, executors, warnings
 
-    @staticmethod
     def _make_mcp_stdio_executor(
+        self,
         *,
         server_name: str,
         command: str,
@@ -293,6 +296,8 @@ class CapabilityBuilder:
         remote_name: str,
     ):
         def _execute(call_args: dict[str, Any]) -> Any:
+            if not self._circuit_breaker.can_call(server_name):
+                raise CircuitOpenError(server_name)
             try:
                 from agno.tools.mcp.mcp import MCPTools
                 from mcp import StdioServerParameters
@@ -369,7 +374,13 @@ class CapabilityBuilder:
                     return raw
 
             timeout = max(1.0, float(timeout_s))
-            return asyncio.run(asyncio.wait_for(_run_once(), timeout=timeout))
+            try:
+                result = asyncio.run(asyncio.wait_for(_run_once(), timeout=timeout))
+            except Exception:
+                self._circuit_breaker.record_failure(server_name)
+                raise
+            self._circuit_breaker.record_success(server_name)
+            return result
 
         return _execute
 

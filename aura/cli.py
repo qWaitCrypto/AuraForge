@@ -388,7 +388,21 @@ def _build_parser() -> argparse.ArgumentParser:
     dispatch_parser.set_defaults(func=_cmd_dispatch)
 
     status_parser = subparsers.add_parser("status", help="Show control-plane status.")
-    status_parser.add_argument("agent_id", nargs="?", default=None, help="Optional single agent id.")
+    status_parser.add_argument(
+        "--json",
+        dest="as_json",
+        action="store_true",
+        help="Print dashboard snapshot as JSON.",
+    )
+    status_subparsers = status_parser.add_subparsers(dest="status_cmd", required=False)
+    status_agent_parser = status_subparsers.add_parser("agent", help="Show one agent detail as JSON.")
+    status_agent_parser.add_argument("agent_id", help="Agent id.")
+    status_agent_parser.set_defaults(func=_cmd_status_agent)
+    status_issue_parser = status_subparsers.add_parser("issue", help="Show one issue detail as JSON.")
+    status_issue_parser.add_argument("issue_key", help="Issue key.")
+    status_issue_parser.set_defaults(func=_cmd_status_issue)
+    status_mcp_parser = status_subparsers.add_parser("mcp", help="Show MCP breaker states.")
+    status_mcp_parser.set_defaults(func=_cmd_status_mcp)
     status_parser.set_defaults(func=_cmd_status)
 
     policy_parser = subparsers.add_parser("policy", help="Manage control policy.")
@@ -440,6 +454,12 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     recover_takeover_parser.add_argument("--reason", dest="reason", default="manual_takeover", help="Takeover reason.")
     recover_takeover_parser.set_defaults(func=_cmd_recover_takeover)
+    recover_force_close_parser = recover_subparsers.add_parser(
+        "force-close",
+        help="Force close one MCP circuit breaker.",
+    )
+    recover_force_close_parser.add_argument("breaker_name", help="Breaker name (usually MCP server name).")
+    recover_force_close_parser.set_defaults(func=_cmd_recover_force_close)
 
     debug_parser = subparsers.add_parser("debug", help="Debug utilities.")
     debug_subparsers = debug_parser.add_subparsers(dest="debug_cmd", required=True)
@@ -1667,30 +1687,72 @@ def _cmd_status(args: argparse.Namespace) -> int:
     if control is None:
         print(str(error), file=sys.stderr)
         return code
-    policy = control.policy_gate.load_policy()
 
-    agent_id_raw = getattr(args, "agent_id", None)
-    agent_id = str(agent_id_raw).strip() if isinstance(agent_id_raw, str) and agent_id_raw.strip() else None
-    if agent_id is not None:
-        record = control.status_tracker.refresh(
-            agent_id,
-            sandbox_idle_timeout_ms=policy.sandbox_idle_timeout_ms,
-        )
-        print(json.dumps(record.model_dump(mode="json"), ensure_ascii=False, indent=2, sort_keys=True))
+    snapshot = control.dashboard.snapshot()
+    if bool(getattr(args, "as_json", False)):
+        print(json.dumps(snapshot.model_dump(mode="json"), ensure_ascii=False, indent=2, sort_keys=True))
         return EXIT_OK
 
-    control.status_tracker.refresh_all(sandbox_idle_timeout_ms=policy.sandbox_idle_timeout_ms)
-    rows = control.status_tracker.list_all()
+    rows = snapshot.agents
     if not rows:
         print("No agents found.")
         return EXIT_OK
     print("agent_id\tstate\tactive_issue_keys\tpending_signal_count\tfailure_count_24h")
     for row in rows:
-        issues = ",".join(row.active_issue_keys)
+        issues = ",".join(list(row.active_issue_keys))
         print(
             f"{row.agent_id}\t{row.state.value}\t{issues}\t"
             f"{row.pending_signal_count}\t{row.failure_count_24h}"
         )
+    return EXIT_OK
+
+
+def _cmd_status_agent(args: argparse.Namespace) -> int:
+    control, error, code = _load_control_plane()
+    if control is None:
+        print(str(error), file=sys.stderr)
+        return code
+
+    agent_id = str(getattr(args, "agent_id", "") or "").strip()
+    if not agent_id:
+        print("agent_id is required.", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+    try:
+        payload = control.dashboard.agent_detail(agent_id)
+    except Exception as e:
+        print(str(e), file=sys.stderr)
+        return EXIT_ERROR
+    print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+    return EXIT_OK
+
+
+def _cmd_status_issue(args: argparse.Namespace) -> int:
+    control, error, code = _load_control_plane()
+    if control is None:
+        print(str(error), file=sys.stderr)
+        return code
+
+    issue_key = str(getattr(args, "issue_key", "") or "").strip()
+    if not issue_key:
+        print("issue_key is required.", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+    try:
+        payload = control.dashboard.issue_detail(issue_key)
+    except Exception as e:
+        print(str(e), file=sys.stderr)
+        return EXIT_ERROR
+    print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+    return EXIT_OK
+
+
+def _cmd_status_mcp(_: argparse.Namespace) -> int:
+    control, error, code = _load_control_plane()
+    if control is None:
+        print(str(error), file=sys.stderr)
+        return code
+
+    rows = [item.model_dump(mode="json") for item in control.circuit_breaker.list_all()]
+    print(json.dumps({"breakers": rows}, ensure_ascii=False, indent=2, sort_keys=True))
     return EXIT_OK
 
 
@@ -1919,6 +1981,35 @@ def _cmd_recover_takeover(args: argparse.Namespace) -> int:
         )
     )
     return EXIT_OK if record.ok else EXIT_ERROR
+
+
+def _cmd_recover_force_close(args: argparse.Namespace) -> int:
+    control, error, code = _load_control_plane()
+    if control is None:
+        print(str(error), file=sys.stderr)
+        return code
+
+    breaker_name = str(getattr(args, "breaker_name", "") or "").strip()
+    if not breaker_name:
+        print("breaker_name is required.", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+    try:
+        record = control.circuit_breaker.force_close(breaker_name)
+    except Exception as e:
+        print(str(e), file=sys.stderr)
+        return EXIT_ERROR
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "breaker": record.model_dump(mode="json"),
+            },
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return EXIT_OK
 
 
 def _cmd_sandbox_create(args: argparse.Namespace) -> int:

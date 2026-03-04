@@ -7,6 +7,15 @@ from ..event_log import EventLog, EventLogFileStore
 from ..sandbox import SandboxManager
 from ..signal import SignalBus, SignalStore
 from .agent_status import AgentStatusTracker
+from .circuit_breaker import (
+    BreakerConfig,
+    BreakerRecord,
+    BreakerState,
+    CircuitBreaker,
+    CircuitOpenError,
+    get_shared_circuit_breaker,
+)
+from .dashboard import AgentRow, DashboardAggregator, DashboardSnapshot, IssueRow, SystemSummary
 from .dispatcher import DispatchRequest, DispatchResult, Dispatcher
 from .health_probe import HealthProbe, ProbeIssue, ProbeIssueKind, ProbeReport
 from .policy import ControlPolicy, PolicyCheckResult, PolicyGate
@@ -23,6 +32,8 @@ class ControlPlane:
     dispatcher: Dispatcher
     health_probe: HealthProbe
     recovery_manager: RecoveryManager
+    circuit_breaker: CircuitBreaker
+    dashboard: DashboardAggregator
 
 
 def build_control_plane(*, project_root: Path) -> ControlPlane:
@@ -60,6 +71,14 @@ def build_control_plane(*, project_root: Path) -> ControlPlane:
         policy_gate=policy_gate,
         event_log=event_log,
     )
+    circuit_breaker = get_shared_circuit_breaker(project_root=root)
+    dashboard = DashboardAggregator(
+        project_root=root,
+        status_tracker=status_tracker,
+        signal_bus=signal_bus,
+        sandbox_manager=sandbox_manager,
+        event_log=event_log,
+    )
     return ControlPlane(
         event_log=event_log,
         signal_bus=signal_bus,
@@ -69,17 +88,28 @@ def build_control_plane(*, project_root: Path) -> ControlPlane:
         dispatcher=dispatcher,
         health_probe=health_probe,
         recovery_manager=recovery_manager,
+        circuit_breaker=circuit_breaker,
+        dashboard=dashboard,
     )
 
 
 __all__ = [
     "AgentStatusTracker",
+    "AgentRow",
+    "BreakerConfig",
+    "BreakerRecord",
+    "BreakerState",
+    "CircuitBreaker",
+    "CircuitOpenError",
     "ControlPlane",
     "ControlPolicy",
+    "DashboardAggregator",
+    "DashboardSnapshot",
     "DispatchRequest",
     "DispatchResult",
     "Dispatcher",
     "HealthProbe",
+    "IssueRow",
     "PolicyCheckResult",
     "PolicyGate",
     "ProbeIssue",
@@ -88,5 +118,6 @@ __all__ = [
     "RecoveryAction",
     "RecoveryManager",
     "RecoveryRecord",
+    "SystemSummary",
     "build_control_plane",
 ]
