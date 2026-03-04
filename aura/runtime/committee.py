@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import importlib.resources
 import json
+import os
 import re
 import subprocess
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Callable
+from urllib import error as urllib_error
+from urllib import parse as urllib_parse
+from urllib import request as urllib_request
 
 from pydantic import BaseModel, Field
 
@@ -51,6 +55,28 @@ def _slug_token(raw: str) -> str:
     return cleaned.upper()[:24]
 
 
+def _to_bool(value: Any, *, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    text = str(value).strip().lower()
+    if not text:
+        return default
+    return text in {"1", "true", "yes", "y", "on"}
+
+
+def _priority_to_linear(value: str) -> int | None:
+    normalized = _clean_text(value).lower()
+    if normalized == "high":
+        return 2
+    if normalized == "medium":
+        return 3
+    if normalized == "low":
+        return 4
+    return None
+
+
 def is_project_request_signal(signal: Signal) -> bool:
     if signal.signal_type is not SignalType.WAKE:
         return False
@@ -84,6 +110,7 @@ class CommitteeRequest(BaseModel):
     context: str
     constraints: list[str] = Field(default_factory=list)
     priority: str = "medium"
+    linear_team_id: str | None = None
     references: list[str] = Field(default_factory=list)
     status: CommitteeRequestStatus = CommitteeRequestStatus.PENDING
     tasks: list[CommitteeTask] = Field(default_factory=list)
@@ -189,6 +216,14 @@ class CommitteeCoordinator:
     bid_llm_evaluator: Callable[..., dict[str, Any]] | None = None
     completion_verification_mode: str = "rules_mvp"
     issue_creator: Callable[..., str | None] | None = None
+    linear_comments_reader: Callable[..., list[dict[str, Any]]] | None = None
+    linear_graphql_url: str = "https://api.linear.app/graphql"
+    linear_api_key_env: str = "LINEAR_API_KEY"
+    linear_team_id: str | None = None
+    delivery_publisher: Callable[..., dict[str, Any]] | None = None
+    auto_publish_on_accept: bool = False
+    github_api_url: str = "https://api.github.com"
+    github_token_env: str = "GITHUB_TOKEN"
 
     def __post_init__(self) -> None:
         self.project_root = self.project_root.expanduser().resolve()
@@ -204,6 +239,12 @@ class CommitteeCoordinator:
             # Keep coordinator default aligned with non-default bidding evaluator mode.
             self.bid_evaluation_mode = bidding_mode
         self.completion_verification_mode = _clean_text(self.completion_verification_mode).lower() or "rules_mvp"
+        if not _clean_text(self.linear_team_id):
+            self.linear_team_id = _clean_text(os.getenv("LINEAR_TEAM_ID"))
+        self.auto_publish_on_accept = _to_bool(
+            self.auto_publish_on_accept,
+            default=_to_bool(os.getenv("AURAFORGE_AUTO_PUBLISH_ON_ACCEPT"), default=False),
+        )
         if self.sandbox_manager is None:
             self.sandbox_manager = SandboxManager(project_root=self.project_root)
         if self.notifications is None:
@@ -314,6 +355,8 @@ class CommitteeCoordinator:
         for issue_key in issue_keys:
             raw_comments = comments_by_issue.get(issue_key, [])
             comments = raw_comments if isinstance(raw_comments, list) else []
+            if not comments and _to_bool(payload.get("fetch_linear_comments"), default=True):
+                comments = self._fetch_linear_comments_for_issue(issue_key=issue_key)
             collected = self.collect_bids(issue_key=issue_key, comments=comments)
             evaluated: dict[str, Any] | None = None
             should_evaluate = auto_evaluate and (
@@ -344,6 +387,199 @@ class CommitteeCoordinator:
             "processed_count": len(processed),
             "issues": processed,
         }
+
+    @staticmethod
+    def _http_json(
+        *,
+        url: str,
+        method: str = "POST",
+        headers: dict[str, str] | None = None,
+        payload: dict[str, Any] | None = None,
+        timeout_s: float = 20.0,
+    ) -> dict[str, Any]:
+        body = json.dumps(payload or {}, ensure_ascii=False).encode("utf-8")
+        req = urllib_request.Request(
+            str(url),
+            data=body,
+            method=str(method or "POST").upper(),
+            headers=headers or {},
+        )
+        with urllib_request.urlopen(req, timeout=max(1.0, float(timeout_s))) as resp:
+            raw = resp.read()
+        try:
+            parsed = json.loads(raw.decode("utf-8", errors="replace"))
+        except Exception:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+
+    def _linear_api_key(self) -> str:
+        env_name = _clean_text(self.linear_api_key_env) or "LINEAR_API_KEY"
+        return _clean_text(os.getenv(env_name))
+
+    def _linear_graphql(self, *, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any] | None:
+        token = self._linear_api_key()
+        if not token:
+            return None
+        try:
+            response = self._http_json(
+                url=self.linear_graphql_url,
+                method="POST",
+                headers={
+                    "Authorization": token,
+                    "Content-Type": "application/json",
+                },
+                payload={"query": query, "variables": variables or {}},
+                timeout_s=20.0,
+            )
+        except urllib_error.URLError:
+            return None
+        except Exception:
+            return None
+        if not isinstance(response, dict):
+            return None
+        if isinstance(response.get("errors"), list) and response.get("errors"):
+            return None
+        data = response.get("data")
+        return data if isinstance(data, dict) else None
+
+    def _resolve_linear_team_id(self, *, request: CommitteeRequest, task: CommitteeTask) -> str:
+        if _clean_text(request.linear_team_id):
+            return _clean_text(request.linear_team_id)
+        if _clean_text(self.linear_team_id):
+            return _clean_text(self.linear_team_id)
+        # Fallback: allow request references to carry team hints like `linear_team_id:<id>`.
+        for item in request.references:
+            text = _clean_text(item)
+            if not text:
+                continue
+            if text.lower().startswith("linear_team_id:"):
+                return _clean_text(text.split(":", 1)[1])
+        return ""
+
+    def _compose_linear_issue_description(self, *, request: CommitteeRequest, task: CommitteeTask) -> str:
+        lines: list[str] = []
+        lines.append(task.description or task.title)
+        if task.acceptance_criteria:
+            lines.append("")
+            lines.append("Acceptance criteria:")
+            for criterion in task.acceptance_criteria:
+                lines.append(f"- {criterion}")
+        if task.required_capabilities:
+            lines.append("")
+            lines.append("Required capabilities:")
+            for capability in task.required_capabilities:
+                lines.append(f"- {capability}")
+        if request.constraints:
+            lines.append("")
+            lines.append("Constraints:")
+            for constraint in request.constraints:
+                lines.append(f"- {constraint}")
+        if request.references:
+            lines.append("")
+            lines.append("References:")
+            for ref in request.references:
+                lines.append(f"- {ref}")
+        return "\n".join(lines).strip()
+
+    def _create_linear_issue_key(self, *, request: CommitteeRequest, task: CommitteeTask) -> str:
+        team_id = self._resolve_linear_team_id(request=request, task=task)
+        if not team_id:
+            return ""
+        mutation = """
+        mutation IssueCreate($input: IssueCreateInput!) {
+          issueCreate(input: $input) {
+            success
+            issue {
+              id
+              identifier
+              url
+            }
+          }
+        }
+        """
+        issue_input: dict[str, Any] = {
+            "teamId": team_id,
+            "title": (task.title or "Committee task")[:250],
+            "description": self._compose_linear_issue_description(request=request, task=task),
+        }
+        priority = _priority_to_linear(request.priority)
+        if isinstance(priority, int):
+            issue_input["priority"] = priority
+        data = self._linear_graphql(query=mutation, variables={"input": issue_input})
+        if not isinstance(data, dict):
+            return ""
+        payload = data.get("issueCreate")
+        if not isinstance(payload, dict) or not payload.get("success"):
+            return ""
+        issue = payload.get("issue")
+        if not isinstance(issue, dict):
+            return ""
+        return _clean_text(issue.get("identifier"))
+
+    def _fetch_linear_comments_for_issue(self, *, issue_key: str) -> list[dict[str, Any]]:
+        reader = self.linear_comments_reader
+        if callable(reader):
+            try:
+                rows = reader(issue_key=issue_key, coordinator=self)
+            except TypeError:
+                try:
+                    rows = reader(issue_key)
+                except Exception:
+                    rows = []
+            except Exception:
+                rows = []
+            if isinstance(rows, list):
+                return [item for item in rows if isinstance(item, dict) or isinstance(item, str)]
+
+        issue_token = _clean_text(issue_key)
+        if not issue_token:
+            return []
+        query = """
+        query IssueComments($identifier: String!) {
+          issues(first: 1, filter: { identifier: { eq: $identifier } }) {
+            nodes {
+              id
+              identifier
+              comments(first: 100) {
+                nodes {
+                  id
+                  body
+                  url
+                  createdAt
+                }
+              }
+            }
+          }
+        }
+        """
+        data = self._linear_graphql(query=query, variables={"identifier": issue_token})
+        if not isinstance(data, dict):
+            return []
+        issues = data.get("issues")
+        if not isinstance(issues, dict):
+            return []
+        nodes = issues.get("nodes")
+        if not isinstance(nodes, list) or not nodes:
+            return []
+        issue = nodes[0] if isinstance(nodes[0], dict) else {}
+        comments_block = issue.get("comments") if isinstance(issue, dict) else {}
+        comments_nodes = comments_block.get("nodes") if isinstance(comments_block, dict) else []
+        out: list[dict[str, Any]] = []
+        if isinstance(comments_nodes, list):
+            for row in comments_nodes:
+                if not isinstance(row, dict):
+                    continue
+                body = _clean_text(row.get("body"))
+                if not body:
+                    continue
+                out.append(
+                    {
+                        "id": _clean_text(row.get("id")) or None,
+                        "body": body,
+                        "url": _clean_text(row.get("url")) or None,
+                    }
+                )
+        return out
 
     @staticmethod
     def _is_task_completed_signal(signal: Signal) -> bool:
@@ -457,6 +693,198 @@ class CommitteeCoordinator:
         except Exception as exc:
             return False, None, str(exc)
 
+    def _run_git(self, *, cwd: Path, args: list[str]) -> tuple[bool, str]:
+        proc = subprocess.run(
+            ["git", *args],
+            cwd=cwd,
+            text=True,
+            capture_output=True,
+        )
+        if proc.returncode != 0:
+            detail = _clean_text(proc.stderr or proc.stdout)
+            return False, detail or str(proc.returncode)
+        return True, _clean_text(proc.stdout)
+
+    def _remote_origin_url(self) -> str:
+        ok, out = self._run_git(cwd=self.project_root, args=["remote", "get-url", "origin"])
+        return out if ok else ""
+
+    @staticmethod
+    def _parse_github_repo(remote_url: str) -> tuple[str, str] | None:
+        raw = _clean_text(remote_url)
+        if not raw:
+            return None
+        patterns = [
+            r"^git@github\.com:(?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?$",
+            r"^https://github\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?$",
+            r"^http://github\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?$",
+        ]
+        for pattern in patterns:
+            match = re.match(pattern, raw)
+            if match is None:
+                continue
+            owner = _clean_text(match.group("owner"))
+            repo = _clean_text(match.group("repo"))
+            if owner and repo:
+                return owner, repo
+        return None
+
+    def _github_token(self) -> str:
+        env_name = _clean_text(self.github_token_env) or "GITHUB_TOKEN"
+        return _clean_text(os.getenv(env_name))
+
+    def _github_create_pr(
+        self,
+        *,
+        owner: str,
+        repo: str,
+        head_branch: str,
+        base_branch: str,
+        issue_key: str,
+        summary: str,
+    ) -> tuple[str | None, str | None]:
+        token = self._github_token()
+        if not token:
+            return None, "missing_github_token"
+
+        title = f"[{issue_key}] Delivery from Committee"
+        body_lines = [
+            f"Automated delivery for `{issue_key}`.",
+            "",
+            "Summary:",
+            summary or "Completed by worker automation.",
+        ]
+        body = "\n".join(body_lines)
+        url = f"{self.github_api_url.rstrip('/')}/repos/{owner}/{repo}/pulls"
+        payload = {
+            "title": title[:250],
+            "head": head_branch,
+            "base": base_branch,
+            "body": body,
+            "maintainer_can_modify": True,
+        }
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "Content-Type": "application/json",
+            "User-Agent": "AuraForge-Committee",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+
+        try:
+            created = self._http_json(url=url, method="POST", headers=headers, payload=payload, timeout_s=20.0)
+        except urllib_error.HTTPError as exc:
+            if exc.code != 422:
+                return None, f"github_pr_create_http_{exc.code}"
+            # If PR already exists for this head, fetch it.
+            existing_url = (
+                f"{self.github_api_url.rstrip('/')}/repos/{owner}/{repo}/pulls?"
+                + urllib_parse.urlencode({"head": f"{owner}:{head_branch}", "state": "open"})
+            )
+            req = urllib_request.Request(existing_url, method="GET", headers=headers)
+            try:
+                with urllib_request.urlopen(req, timeout=15.0) as resp:
+                    raw = resp.read()
+                rows = json.loads(raw.decode("utf-8", errors="replace"))
+            except Exception:
+                return None, "github_pr_exists_but_lookup_failed"
+            if isinstance(rows, list) and rows:
+                item = rows[0] if isinstance(rows[0], dict) else {}
+                return _clean_text(item.get("html_url")) or None, None
+            return None, "github_pr_exists_but_not_found"
+        except Exception as exc:
+            return None, f"github_pr_create_failed:{exc}"
+
+        if not isinstance(created, dict):
+            return None, "github_pr_invalid_response"
+        pr_url = _clean_text(created.get("html_url"))
+        if not pr_url:
+            return None, "github_pr_missing_url"
+        return pr_url, None
+
+    def _publish_delivery(
+        self,
+        *,
+        issue_key: str,
+        signal: Signal,
+        payload: dict[str, Any],
+        summary: str,
+    ) -> dict[str, Any]:
+        publisher = self.delivery_publisher
+        if callable(publisher):
+            try:
+                result = publisher(issue_key=issue_key, signal=signal, payload=payload, summary=summary, coordinator=self)
+            except TypeError:
+                try:
+                    result = publisher(issue_key, signal, payload, summary)
+                except Exception as exc:
+                    return {"ok": False, "error": f"delivery_publisher_failed:{exc}"}
+            except Exception as exc:
+                return {"ok": False, "error": f"delivery_publisher_failed:{exc}"}
+            return result if isinstance(result, dict) else {"ok": False, "error": "delivery_publisher_invalid_result"}
+
+        auto_publish = _to_bool(payload.get("auto_publish"), default=self.auto_publish_on_accept)
+        if not auto_publish:
+            return {"ok": False, "reason": "auto_publish_disabled"}
+
+        sandbox_id = _clean_text(signal.sandbox_id)
+        if not sandbox_id:
+            return {"ok": False, "error": "missing_sandbox_id"}
+        manager = self.sandbox_manager
+        if manager is None:
+            return {"ok": False, "error": "sandbox_manager_unavailable"}
+        getter = getattr(manager, "get", None)
+        if not callable(getter):
+            return {"ok": False, "error": "sandbox_lookup_unavailable"}
+        try:
+            sandbox = getter(sandbox_id)
+        except Exception as exc:
+            return {"ok": False, "error": f"sandbox_lookup_failed:{exc}"}
+        if not isinstance(sandbox, Sandbox):
+            return {"ok": False, "error": "sandbox_not_found"}
+
+        worktree_abs = (self.project_root / sandbox.worktree_path).resolve()
+        if not worktree_abs.exists():
+            return {"ok": False, "error": "sandbox_worktree_missing"}
+
+        pushed = False
+        push_error: str | None = None
+        ok, out = self._run_git(cwd=worktree_abs, args=["push", "-u", "origin", sandbox.branch])
+        if ok:
+            pushed = True
+        else:
+            push_error = out
+
+        pr_url = _clean_text(payload.get("pr_url")) or ""
+        pr_error: str | None = None
+        if pushed and not pr_url:
+            parsed = self._parse_github_repo(self._remote_origin_url())
+            if parsed is None:
+                pr_error = "unsupported_git_remote_for_pr"
+            else:
+                owner, repo = parsed
+                base_branch = _clean_text(payload.get("base_branch")) or _clean_text(sandbox.base_branch) or "main"
+                created_url, err = self._github_create_pr(
+                    owner=owner,
+                    repo=repo,
+                    head_branch=sandbox.branch,
+                    base_branch=base_branch,
+                    issue_key=issue_key,
+                    summary=summary,
+                )
+                pr_url = _clean_text(created_url)
+                pr_error = err
+
+        return {
+            "ok": bool(pushed),
+            "pushed": pushed,
+            "push_error": push_error,
+            "pr_url": pr_url or None,
+            "pr_error": pr_error,
+            "branch": sandbox.branch,
+            "sandbox_id": sandbox.sandbox_id,
+        }
+
     def _handle_task_completed(self, signal: Signal) -> dict[str, Any]:
         payload = signal.payload if isinstance(signal.payload, dict) else {}
         issue_key = _clean_text(payload.get("issue_key")) or _clean_text(signal.issue_key)
@@ -468,19 +896,33 @@ class CommitteeCoordinator:
 
         if accept:
             summary = _clean_text(verification.get("summary")) or f"{issue_key} completed by {worker_agent}."
+            publish = self._publish_delivery(issue_key=issue_key, signal=signal, payload=payload, summary=summary)
+            pr_url = _clean_text(payload.get("pr_url")) or _clean_text(publish.get("pr_url")) or None
             notification = self.notifications.create(
                 notification_type=NotificationType.TASK_COMPLETED,
                 title=f"{issue_key} completed",
                 summary=summary,
                 issue_key=issue_key,
-                pr_url=_clean_text(payload.get("pr_url")) or None,
+                pr_url=pr_url,
                 details={
                     "agent_id": worker_agent,
                     "sandbox_id": signal.sandbox_id,
                     "signal_id": signal.signal_id,
                     "verification_mode": verification.get("mode"),
+                    "delivery": publish,
                 },
             )
+            pr_notification_id: str | None = None
+            if pr_url:
+                pr_note = self.notifications.create(
+                    notification_type=NotificationType.PR_CREATED,
+                    title=f"{issue_key} PR created",
+                    summary=f"PR opened for {issue_key}.",
+                    issue_key=issue_key,
+                    pr_url=pr_url,
+                    details={"agent_id": worker_agent, "sandbox_id": signal.sandbox_id},
+                )
+                pr_notification_id = pr_note.notification_id
             user_signal = self.signal_bus.send(
                 from_agent=COMMITTEE_AGENT_ID,
                 to_agent="super_agent",
@@ -493,7 +935,8 @@ class CommitteeCoordinator:
                     "agent_id": worker_agent,
                     "summary": summary,
                     "notification_id": notification.notification_id,
-                    "pr_url": _clean_text(payload.get("pr_url")) or None,
+                    "pr_notification_id": pr_notification_id,
+                    "pr_url": pr_url,
                     "verification_mode": verification.get("mode"),
                 },
             )
@@ -513,6 +956,7 @@ class CommitteeCoordinator:
                     "issue_key": issue_key,
                     "agent_id": worker_agent,
                     "notification_id": notification.notification_id,
+                    "pr_notification_id": pr_notification_id,
                     "notify_signal_id": user_signal.signal_id,
                     "verification_mode": verification.get("mode"),
                     "verification_summary": summary,
@@ -520,6 +964,7 @@ class CommitteeCoordinator:
                     "cleanup_cleaned": cleanup_cleaned,
                     "cleanup_skipped_reason": cleanup_skipped_reason,
                     "cleanup_error": cleanup_error,
+                    "delivery": publish,
                 },
             )
             return {
@@ -528,11 +973,14 @@ class CommitteeCoordinator:
                 "decision": "accept",
                 "issue_key": issue_key,
                 "notification_id": notification.notification_id,
+                "pr_notification_id": pr_notification_id,
                 "notify_signal_id": user_signal.signal_id,
                 "verification_mode": verification.get("mode"),
                 "cleanup_cleaned": cleanup_cleaned,
                 "cleanup_skipped_reason": cleanup_skipped_reason,
                 "cleanup_error": cleanup_error,
+                "pr_url": pr_url,
+                "delivery": publish,
             }
 
         missing_criteria = _clean_list(verification.get("missing_criteria"))
@@ -606,6 +1054,9 @@ class CommitteeCoordinator:
             created_key = _clean_text(created)
             if created_key:
                 return created_key, "linear_mcp"
+        created_key = self._create_linear_issue_key(request=request, task=task)
+        if created_key:
+            return created_key, "linear_api"
         return task.issue_key, task.issue_key_source
 
     def _materialize_issue_keys(self, *, request: CommitteeRequest) -> CommitteeRequest:
@@ -651,6 +1102,14 @@ class CommitteeCoordinator:
         if not request_id:
             request_id = f"req_{new_id('committee')}"
 
+        linear_team_id = (
+            _clean_text(payload.get("linear_team_id"))
+            or _clean_text(payload.get("team_id"))
+            or _clean_text(payload.get("teamId"))
+            or _clean_text(payload.get("linear_team"))
+            or None
+        )
+
         tasks = self._tasks_from_payload(payload=payload, request_id=request_id, goal=goal, context=context)
         return CommitteeRequest(
             request_id=request_id,
@@ -660,6 +1119,7 @@ class CommitteeCoordinator:
             context=context,
             constraints=_clean_list(payload.get("constraints")),
             priority=priority,
+            linear_team_id=linear_team_id,
             references=_clean_list(payload.get("references")),
             tasks=tasks,
         )

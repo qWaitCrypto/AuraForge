@@ -28,6 +28,7 @@ from .protocol import Op, OpKind
 class RunnerConfig:
     poll_interval_s: float = 2.0
     idle_timeout_s: float = 300.0
+    bid_check_interval_s: float = 120.0
     max_concurrent_agents: int = 5
     max_signals_per_agent: int = 0
     max_auto_approval_loops: int = 8
@@ -150,14 +151,17 @@ class AgentRunner:
 
         self._engine_factory = engine_factory or self._build_engine_for_session
         self._running = False
+        self._next_bid_check_ts_ms = 0
 
     async def start(self) -> None:
         self._running = True
+        self._next_bid_check_ts_ms = 0
         self._append_metric("runner_started", {"pid": os.getpid()})
         self._write_sessions_snapshot()
         try:
             while self._running:
                 await self._poll_and_dispatch()
+                self._emit_periodic_bid_check()
                 await self._reap_finished_sessions()
                 await asyncio.sleep(max(0.1, float(self._config.poll_interval_s)))
         finally:
@@ -189,6 +193,36 @@ class AgentRunner:
             signal_type=SignalType.WAKE,
             brief=str(brief or "wake").strip()[:200] or "wake",
             issue_key=str(issue_key or "").strip() or None,
+        )
+
+    def _emit_periodic_bid_check(self) -> None:
+        interval = float(self._config.bid_check_interval_s)
+        if interval <= 0:
+            return
+        now = now_ts_ms()
+        if self._next_bid_check_ts_ms <= 0:
+            self._next_bid_check_ts_ms = now + int(interval * 1000)
+            return
+        if now < self._next_bid_check_ts_ms:
+            return
+        self._next_bid_check_ts_ms = now + int(interval * 1000)
+        signal = self._signal_bus.send(
+            from_agent="runner.timer",
+            to_agent=COMMITTEE_AGENT_ID,
+            signal_type=SignalType.NOTIFY,
+            brief="Periodic bid check",
+            payload={
+                "type": "bid_check",
+                "auto_evaluate": True,
+                "fetch_linear_comments": True,
+            },
+        )
+        self._append_metric(
+            "bid_check_emitted",
+            {
+                "signal_id": signal.signal_id,
+                "interval_s": interval,
+            },
         )
 
     async def _poll_and_dispatch(self) -> None:

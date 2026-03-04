@@ -476,6 +476,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     daemon_start_parser.add_argument("--poll-interval", dest="poll_interval_s", type=float, default=2.0)
     daemon_start_parser.add_argument("--idle-timeout", dest="idle_timeout_s", type=float, default=300.0)
+    daemon_start_parser.add_argument("--bid-check-interval", dest="bid_check_interval_s", type=float, default=120.0)
     daemon_start_parser.add_argument("--max-agents", dest="max_concurrent_agents", type=int, default=5)
     daemon_start_parser.add_argument("--probe-interval", dest="probe_interval_s", type=float, default=60.0)
     daemon_start_parser.add_argument("--recovery-interval", dest="recovery_interval_s", type=float, default=120.0)
@@ -484,6 +485,7 @@ def _build_parser() -> argparse.ArgumentParser:
     daemon_run_parser = daemon_subparsers.add_parser("run", help=argparse.SUPPRESS)
     daemon_run_parser.add_argument("--poll-interval", dest="poll_interval_s", type=float, default=2.0)
     daemon_run_parser.add_argument("--idle-timeout", dest="idle_timeout_s", type=float, default=300.0)
+    daemon_run_parser.add_argument("--bid-check-interval", dest="bid_check_interval_s", type=float, default=120.0)
     daemon_run_parser.add_argument("--max-agents", dest="max_concurrent_agents", type=int, default=5)
     daemon_run_parser.add_argument("--probe-interval", dest="probe_interval_s", type=float, default=60.0)
     daemon_run_parser.add_argument("--recovery-interval", dest="recovery_interval_s", type=float, default=120.0)
@@ -2075,6 +2077,7 @@ def _build_control_hub_from_args(*, project_root: Path, args: argparse.Namespace
     runner_cfg = RunnerConfig(
         poll_interval_s=float(getattr(args, "poll_interval_s", 2.0) or 2.0),
         idle_timeout_s=float(getattr(args, "idle_timeout_s", 300.0) or 300.0),
+        bid_check_interval_s=float(getattr(args, "bid_check_interval_s", 120.0) or 120.0),
         max_concurrent_agents=max(1, int(getattr(args, "max_concurrent_agents", 5) or 5)),
     )
     cfg = ControlHubConfig(
@@ -2132,6 +2135,8 @@ def _cmd_daemon_start(args: argparse.Namespace) -> int:
         str(float(getattr(args, "poll_interval_s", 2.0) or 2.0)),
         "--idle-timeout",
         str(float(getattr(args, "idle_timeout_s", 300.0) or 300.0)),
+        "--bid-check-interval",
+        str(float(getattr(args, "bid_check_interval_s", 120.0) or 120.0)),
         "--max-agents",
         str(max(1, int(getattr(args, "max_concurrent_agents", 5) or 5))),
         "--probe-interval",
