@@ -63,9 +63,8 @@ class NotificationStore:
             pr_url=pr_url_value or None,
             details=dict(details or {}) if isinstance(details, dict) else None,
         )
-        rows = self._read_all()
-        rows.append(item)
-        self._write_all(rows)
+        with self._path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(item.model_dump(mode="json"), ensure_ascii=False, sort_keys=True) + "\n")
         return item
 
     def list(self, *, unread_only: bool = False, limit: int = 100) -> list[UserNotification]:

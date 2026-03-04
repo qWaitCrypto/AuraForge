@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
@@ -184,6 +185,7 @@ class CommitteeCoordinator:
     sandbox_manager: Any | None = None
     notifications: NotificationStore | None = None
     bid_evaluation_mode: str = "heuristic_mvp"
+    completion_verification_mode: str = "rules_mvp"
 
     def __post_init__(self) -> None:
         self.project_root = self.project_root.expanduser().resolve()
@@ -198,6 +200,7 @@ class CommitteeCoordinator:
         elif configured_mode == "heuristic_mvp" and bidding_mode and bidding_mode != "heuristic_mvp":
             # Keep coordinator default aligned with non-default bidding evaluator mode.
             self.bid_evaluation_mode = bidding_mode
+        self.completion_verification_mode = _clean_text(self.completion_verification_mode).lower() or "rules_mvp"
         if self.sandbox_manager is None:
             self.sandbox_manager = SandboxManager(project_root=self.project_root)
         if self.notifications is None:
@@ -342,10 +345,113 @@ class CommitteeCoordinator:
     def _is_task_completed_signal(signal: Signal) -> bool:
         payload = signal.payload if isinstance(signal.payload, dict) else {}
         payload_type = _clean_text(payload.get("type")).lower()
-        if payload_type in {"task_completed", "work_completed", "completion"}:
-            return True
-        brief = _clean_text(signal.brief).lower()
-        return "task_completed" in brief or "completed" in brief
+        if payload_type not in {"task_completed", "work_completed", "completion"}:
+            return False
+        issue_key = _clean_text(payload.get("issue_key")) or _clean_text(signal.issue_key)
+        return bool(issue_key)
+
+    def _verify_task_completed(self, *, signal: Signal, payload: dict[str, Any], issue_key: str) -> dict[str, Any]:
+        worker_agent = _clean_text(signal.from_agent) or "worker"
+        verification = payload.get("verification") if isinstance(payload.get("verification"), dict) else {}
+        decision = _clean_text(verification.get("decision")).lower()
+        summary = _clean_text(verification.get("summary")) or _clean_text(payload.get("summary"))
+        missing_criteria = _clean_list(verification.get("missing_criteria"))
+        required_revisions = _clean_list(verification.get("required_revisions"))
+
+        acceptance_criteria = _clean_list(payload.get("acceptance_criteria"))
+        audit_summary = _clean_text(payload.get("audit_summary")) or _clean_text(payload.get("audit_evidence"))
+        snapshot_summary = _clean_text(payload.get("snapshot_summary")) or _clean_text(payload.get("snapshot_diff"))
+
+        # Worker decision flags are ignored. Committee must verify independently.
+        if decision not in {"accept", "reject"}:
+            if required_revisions or missing_criteria:
+                decision = "reject"
+            elif acceptance_criteria and (not audit_summary or not snapshot_summary):
+                if not audit_summary:
+                    required_revisions.append("Attach audit evidence for verification.")
+                if not snapshot_summary:
+                    required_revisions.append("Attach snapshot diff evidence for verification.")
+                decision = "reject"
+            else:
+                decision = "accept"
+
+        if decision == "accept" and (required_revisions or missing_criteria):
+            decision = "reject"
+
+        if not summary:
+            if decision == "accept":
+                summary = f"{issue_key} completed by {worker_agent}."
+            else:
+                summary = "Committee verification requires revisions."
+
+        return {
+            "decision": decision,
+            "summary": summary,
+            "missing_criteria": missing_criteria,
+            "required_revisions": required_revisions,
+            "acceptance_criteria": acceptance_criteria,
+            "audit_summary": audit_summary,
+            "snapshot_summary": snapshot_summary,
+            "mode": self.completion_verification_mode,
+        }
+
+    def _sandbox_worktree_is_clean(self, *, sandbox_id: str) -> tuple[bool, str | None]:
+        manager = self.sandbox_manager
+        if manager is None:
+            return False, "sandbox_manager_unavailable"
+
+        custom_is_clean = getattr(manager, "is_clean", None)
+        if callable(custom_is_clean):
+            try:
+                is_clean = bool(custom_is_clean(sandbox_id))
+                return is_clean, None if is_clean else "sandbox_dirty"
+            except Exception as exc:
+                return False, f"sandbox_clean_probe_failed:{exc}"
+
+        getter = getattr(manager, "get", None)
+        if not callable(getter):
+            return False, "sandbox_state_unknown"
+        try:
+            sandbox = getter(sandbox_id)
+        except Exception as exc:
+            return False, f"sandbox_lookup_failed:{exc}"
+        if not isinstance(sandbox, Sandbox):
+            return False, "sandbox_not_found"
+
+        worktree_abs = (self.project_root / sandbox.worktree_path).resolve()
+        if not worktree_abs.exists():
+            return False, "sandbox_worktree_missing"
+
+        probe = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=worktree_abs,
+            text=True,
+            capture_output=True,
+        )
+        if probe.returncode != 0:
+            detail = _clean_text(probe.stderr or probe.stdout)
+            return False, f"sandbox_clean_probe_failed:{detail or probe.returncode}"
+        if _clean_text(probe.stdout):
+            return False, "sandbox_dirty"
+        return True, None
+
+    def _cleanup_sandbox_if_safe(self, *, signal: Signal, payload: dict[str, Any]) -> tuple[bool, str | None, str | None]:
+        sandbox_id = _clean_text(signal.sandbox_id)
+        if not sandbox_id:
+            return False, "missing_sandbox_id", None
+        if not bool(payload.get("pr_merged")) and not bool(payload.get("cleanup_force")):
+            return False, "pr_not_merged", None
+        if not bool(payload.get("cleanup_force")):
+            clean, reason = self._sandbox_worktree_is_clean(sandbox_id=sandbox_id)
+            if not clean:
+                return False, reason or "sandbox_not_clean", None
+        if self.sandbox_manager is None:
+            return False, "sandbox_manager_unavailable", None
+        try:
+            self.sandbox_manager.destroy(sandbox_id)
+            return True, None, None
+        except Exception as exc:
+            return False, None, str(exc)
 
     def _handle_task_completed(self, signal: Signal) -> dict[str, Any]:
         payload = signal.payload if isinstance(signal.payload, dict) else {}
@@ -353,18 +459,11 @@ class CommitteeCoordinator:
         if not issue_key:
             return {"handled": False, "reason": "missing_issue_key"}
         worker_agent = _clean_text(signal.from_agent) or "worker"
-
-        decision = payload.get("decision")
-        accept: bool
-        if isinstance(decision, str) and decision.strip():
-            accept = decision.strip().lower() in {"accept", "approved", "pass"}
-        elif isinstance(payload.get("accept"), bool):
-            accept = bool(payload.get("accept"))
-        else:
-            accept = True
+        verification = self._verify_task_completed(signal=signal, payload=payload, issue_key=issue_key)
+        accept = verification.get("decision") == "accept"
 
         if accept:
-            summary = _clean_text(payload.get("summary")) or f"{issue_key} completed by {worker_agent}."
+            summary = _clean_text(verification.get("summary")) or f"{issue_key} completed by {worker_agent}."
             notification = self.notifications.create(
                 notification_type=NotificationType.TASK_COMPLETED,
                 title=f"{issue_key} completed",
@@ -375,6 +474,7 @@ class CommitteeCoordinator:
                     "agent_id": worker_agent,
                     "sandbox_id": signal.sandbox_id,
                     "signal_id": signal.signal_id,
+                    "verification_mode": verification.get("mode"),
                 },
             )
             user_signal = self.signal_bus.send(
@@ -390,16 +490,19 @@ class CommitteeCoordinator:
                     "summary": summary,
                     "notification_id": notification.notification_id,
                     "pr_url": _clean_text(payload.get("pr_url")) or None,
+                    "verification_mode": verification.get("mode"),
                 },
             )
 
+            # TODO(phase-05): finalize push/PR/merge workflow before defaulting to cleanup.
             cleanup_error: str | None = None
-            if bool(payload.get("cleanup_sandbox")) and isinstance(signal.sandbox_id, str) and signal.sandbox_id.strip():
-                try:
-                    if self.sandbox_manager is not None:
-                        self.sandbox_manager.destroy(signal.sandbox_id.strip())
-                except Exception as exc:
-                    cleanup_error = str(exc)
+            cleanup_cleaned = False
+            cleanup_skipped_reason: str | None = None
+            if bool(payload.get("cleanup_sandbox")):
+                cleanup_cleaned, cleanup_skipped_reason, cleanup_error = self._cleanup_sandbox_if_safe(
+                    signal=signal,
+                    payload=payload,
+                )
             self.store.append_activity(
                 event="completion_accepted",
                 payload={
@@ -407,6 +510,11 @@ class CommitteeCoordinator:
                     "agent_id": worker_agent,
                     "notification_id": notification.notification_id,
                     "notify_signal_id": user_signal.signal_id,
+                    "verification_mode": verification.get("mode"),
+                    "verification_summary": summary,
+                    "cleanup_requested": bool(payload.get("cleanup_sandbox")),
+                    "cleanup_cleaned": cleanup_cleaned,
+                    "cleanup_skipped_reason": cleanup_skipped_reason,
                     "cleanup_error": cleanup_error,
                 },
             )
@@ -417,10 +525,19 @@ class CommitteeCoordinator:
                 "issue_key": issue_key,
                 "notification_id": notification.notification_id,
                 "notify_signal_id": user_signal.signal_id,
+                "verification_mode": verification.get("mode"),
+                "cleanup_cleaned": cleanup_cleaned,
+                "cleanup_skipped_reason": cleanup_skipped_reason,
                 "cleanup_error": cleanup_error,
             }
 
-        feedback = _clean_text(payload.get("feedback")) or _clean_text(payload.get("reason")) or "Revisions required."
+        missing_criteria = _clean_list(verification.get("missing_criteria"))
+        required_revisions = _clean_list(verification.get("required_revisions"))
+        feedback_items = list(required_revisions)
+        feedback_items.extend([f"Missing acceptance criterion: {item}" for item in missing_criteria])
+        feedback = "; ".join([item for item in feedback_items if item]) or _clean_text(verification.get("summary"))
+        if not feedback:
+            feedback = _clean_text(payload.get("feedback")) or _clean_text(payload.get("reason")) or "Revisions required."
         revision_signal = self.signal_bus.send(
             from_agent=COMMITTEE_AGENT_ID,
             to_agent=worker_agent,
@@ -452,6 +569,9 @@ class CommitteeCoordinator:
                 "issue_key": issue_key,
                 "agent_id": worker_agent,
                 "feedback": feedback,
+                "verification_mode": verification.get("mode"),
+                "missing_criteria": missing_criteria,
+                "required_revisions": required_revisions,
                 "revision_signal_id": revision_signal.signal_id,
                 "notification_id": notification.notification_id,
             },
@@ -464,6 +584,7 @@ class CommitteeCoordinator:
             "feedback": feedback,
             "revision_signal_id": revision_signal.signal_id,
             "notification_id": notification.notification_id,
+            "verification_mode": verification.get("mode"),
         }
 
     def _request_from_signal(self, signal: Signal) -> CommitteeRequest:

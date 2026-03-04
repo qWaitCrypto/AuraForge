@@ -14,9 +14,11 @@ from aura.runtime.signal import SignalBus, SignalStore
 class _FakeSandboxManager:
     def __init__(self) -> None:
         self.destroyed: list[str] = []
+        self._sandboxes: dict[str, Sandbox] = {}
+        self._clean: dict[str, bool] = {}
 
     def create(self, *, agent_id: str, issue_key: str, base_branch: str = "main") -> Sandbox:
-        return Sandbox(
+        sandbox = Sandbox(
             sandbox_id=f"sb_{issue_key}_{agent_id}",
             agent_id=agent_id,
             issue_key=issue_key,
@@ -24,6 +26,19 @@ class _FakeSandboxManager:
             branch=f"agent/{issue_key}/{agent_id}/test",
             base_branch=base_branch,
         )
+        self._sandboxes[sandbox.sandbox_id] = sandbox
+        self._clean[sandbox.sandbox_id] = True
+        return sandbox
+
+    def register(self, sandbox: Sandbox, *, clean: bool = True) -> None:
+        self._sandboxes[sandbox.sandbox_id] = sandbox
+        self._clean[sandbox.sandbox_id] = bool(clean)
+
+    def get(self, sandbox_id: str) -> Sandbox | None:
+        return self._sandboxes.get(sandbox_id)
+
+    def is_clean(self, sandbox_id: str) -> bool:
+        return bool(self._clean.get(sandbox_id, False))
 
     def destroy(self, sandbox_id: str) -> None:
         self.destroyed.append(sandbox_id)
@@ -58,6 +73,14 @@ def test_committee_task_completed_accept_notifies_user(tmp_path: Path) -> None:
         sandbox_manager=fake_sandbox,
         notifications=notifications,
     )
+    sandbox = Sandbox(
+        sandbox_id="sb_AUTO-ACCEPT-1_agent.worker",
+        agent_id="agent.worker",
+        issue_key="AUTO-ACCEPT-1",
+        worktree_path=".aura/sandboxes/sb_AUTO-ACCEPT-1_agent.worker",
+        branch="agent/AUTO-ACCEPT-1/agent.worker/test",
+    )
+    fake_sandbox.register(sandbox, clean=True)
 
     signal = bus.send(
         from_agent="agent.worker",
@@ -68,15 +91,22 @@ def test_committee_task_completed_accept_notifies_user(tmp_path: Path) -> None:
         sandbox_id="sb_AUTO-ACCEPT-1_agent.worker",
         payload={
             "type": "task_completed",
-            "summary": "Implemented and validated.",
-            "accept": True,
+            "accept": False,
+            "verification": {
+                "decision": "accept",
+                "summary": "Implemented and validated.",
+            },
             "cleanup_sandbox": True,
+            "pr_merged": True,
         },
     )
     result = coordinator.handle_signal(signal)
 
     assert result["handled"] is True
     assert result["decision"] == "accept"
+    assert result["verification_mode"] == "rules_mvp"
+    assert result["cleanup_cleaned"] is True
+    assert result["cleanup_skipped_reason"] is None
     assert fake_sandbox.destroyed == ["sb_AUTO-ACCEPT-1_agent.worker"]
 
     user_signals = bus.query(
@@ -105,14 +135,19 @@ def test_committee_task_completed_reject_wakes_worker(tmp_path: Path) -> None:
         sandbox_id="sb_AUTO-REJECT-1_agent.worker",
         payload={
             "type": "task_completed",
-            "accept": False,
-            "feedback": "Missing regression tests for edge cases.",
+            "accept": True,
+            "verification": {
+                "decision": "reject",
+                "summary": "Missing verification evidence.",
+                "required_revisions": ["Add regression tests for edge cases."],
+            },
         },
     )
     result = coordinator.handle_signal(signal)
 
     assert result["handled"] is True
     assert result["decision"] == "reject"
+    assert "regression tests" in result["feedback"].lower()
 
     wakes = bus.query(
         to_agent="agent.worker",
@@ -128,6 +163,60 @@ def test_committee_task_completed_reject_wakes_worker(tmp_path: Path) -> None:
     notifs = coordinator.notifications.list(unread_only=True)
     assert len(notifs) == 1
     assert notifs[0].notification_type is NotificationType.REVIEW_NEEDED
+
+
+def test_committee_task_completed_cleanup_skips_dirty_sandbox(tmp_path: Path) -> None:
+    bus = SignalBus(store=SignalStore(project_root=tmp_path))
+    fake_sandbox = _FakeSandboxManager()
+    coordinator = CommitteeCoordinator(project_root=tmp_path, signal_bus=bus, sandbox_manager=fake_sandbox)
+    sandbox = Sandbox(
+        sandbox_id="sb_AUTO-DIRTY-1_agent.worker",
+        agent_id="agent.worker",
+        issue_key="AUTO-DIRTY-1",
+        worktree_path=".aura/sandboxes/sb_AUTO-DIRTY-1_agent.worker",
+        branch="agent/AUTO-DIRTY-1/agent.worker/test",
+    )
+    fake_sandbox.register(sandbox, clean=False)
+
+    signal = bus.send(
+        from_agent="agent.worker",
+        to_agent="committee",
+        signal_type=SignalType.NOTIFY,
+        brief="task_completed",
+        issue_key="AUTO-DIRTY-1",
+        sandbox_id="sb_AUTO-DIRTY-1_agent.worker",
+        payload={
+            "type": "task_completed",
+            "verification": {"decision": "accept", "summary": "Done"},
+            "cleanup_sandbox": True,
+            "pr_merged": True,
+        },
+    )
+    result = coordinator.handle_signal(signal)
+
+    assert result["handled"] is True
+    assert result["decision"] == "accept"
+    assert result["cleanup_cleaned"] is False
+    assert result["cleanup_skipped_reason"] == "sandbox_dirty"
+    assert fake_sandbox.destroyed == []
+
+
+def test_committee_ignores_notify_without_task_completed_payload_type(tmp_path: Path) -> None:
+    bus = SignalBus(store=SignalStore(project_root=tmp_path))
+    coordinator = CommitteeCoordinator(project_root=tmp_path, signal_bus=bus, sandbox_manager=_FakeSandboxManager())
+
+    signal = bus.send(
+        from_agent="agent.worker",
+        to_agent="committee",
+        signal_type=SignalType.NOTIFY,
+        brief="completed docs update",
+        issue_key="AUTO-NON-COMPLETE-1",
+        payload={"type": "status_update", "summary": "completed docs update"},
+    )
+    result = coordinator.handle_signal(signal)
+
+    assert result["handled"] is False
+    assert result["reason"] == "unsupported_signal"
 
 
 def test_cli_notifications_json_and_mark_read(tmp_path: Path, monkeypatch, capsys) -> None:
