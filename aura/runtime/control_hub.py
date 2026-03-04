@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import signal
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -195,14 +194,8 @@ class ControlHub:
             stop_path.write_text("stop\n", encoding="utf-8")
         except Exception:
             pass
-        if os.name == "nt":
-            return True
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except ProcessLookupError:
-            return False
-        except Exception:
-            return False
+        # Use stop-file handshake for graceful shutdown across platforms.
+        # Daemon command will poll status after this request.
         return True
 
     @staticmethod

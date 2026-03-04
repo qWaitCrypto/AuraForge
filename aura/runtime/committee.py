@@ -1,18 +1,19 @@
 from __future__ import annotations
 
+import importlib.resources
 import json
 import re
 import subprocess
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from pydantic import BaseModel, Field
 
-from .bidding import BiddingConfig, BiddingService
+from .bidding import BidRanker, BiddingConfig, BiddingDecision, BiddingService
 from .ids import new_id, now_ts_ms
-from .models.bidding import BiddingPhase
+from .models.bidding import BidEntry, BiddingPhase, BiddingRecord
 from .models.notification import NotificationType
 from .models.sandbox import Sandbox
 from .models.signal import Signal, SignalType
@@ -185,7 +186,9 @@ class CommitteeCoordinator:
     sandbox_manager: Any | None = None
     notifications: NotificationStore | None = None
     bid_evaluation_mode: str = "heuristic_mvp"
+    bid_llm_evaluator: Callable[..., dict[str, Any]] | None = None
     completion_verification_mode: str = "rules_mvp"
+    issue_creator: Callable[..., str | None] | None = None
 
     def __post_init__(self) -> None:
         self.project_root = self.project_root.expanduser().resolve()
@@ -226,6 +229,7 @@ class CommitteeCoordinator:
         # AgentRunner short-circuits when `handled=True`, so this signal is not processed again
         # by the LLM chat loop in the same turn.
         request = self._request_from_signal(signal)
+        request = self._materialize_issue_keys(request=request)
         self.store.upsert_request(request)
         self.store.append_activity(
             event="project_request_received",
@@ -587,6 +591,54 @@ class CommitteeCoordinator:
             "verification_mode": verification.get("mode"),
         }
 
+    def _create_issue_key(self, *, request: CommitteeRequest, task: CommitteeTask) -> tuple[str, str]:
+        creator = self.issue_creator
+        if callable(creator):
+            try:
+                created = creator(request=request, task=task, coordinator=self)
+            except TypeError:
+                try:
+                    created = creator(request, task)
+                except Exception:
+                    created = None
+            except Exception:
+                created = None
+            created_key = _clean_text(created)
+            if created_key:
+                return created_key, "linear_mcp"
+        return task.issue_key, task.issue_key_source
+
+    def _materialize_issue_keys(self, *, request: CommitteeRequest) -> CommitteeRequest:
+        updated_tasks: list[CommitteeTask] = []
+        replaced: list[dict[str, str]] = []
+        for task in request.tasks:
+            if not task.issue_key_is_placeholder:
+                updated_tasks.append(task)
+                continue
+            issue_key, source = self._create_issue_key(request=request, task=task)
+            issue_key_value = _clean_text(issue_key) or task.issue_key
+            is_placeholder = issue_key_value == task.issue_key and bool(task.issue_key_is_placeholder)
+            next_task = task.model_copy(
+                update={
+                    "issue_key": issue_key_value,
+                    "issue_key_is_placeholder": is_placeholder,
+                    "issue_key_source": source,
+                }
+            )
+            if next_task.issue_key != task.issue_key:
+                replaced.append({"from": task.issue_key, "to": next_task.issue_key, "source": source})
+            updated_tasks.append(next_task)
+
+        if replaced:
+            self.store.append_activity(
+                event="issue_keys_materialized",
+                payload={
+                    "request_id": request.request_id,
+                    "replacements": replaced,
+                },
+            )
+        return request.model_copy(update={"tasks": updated_tasks, "updated_at": now_ts_ms()})
+
     def _request_from_signal(self, signal: Signal) -> CommitteeRequest:
         payload = signal.payload if isinstance(signal.payload, dict) else {}
         goal = _clean_text(payload.get("goal")) or _clean_text(signal.brief) or "Project request"
@@ -715,8 +767,151 @@ class CommitteeCoordinator:
             "bids": [item.model_dump(mode="json") for item in record.bids],
         }
 
+    @staticmethod
+    def _read_prompt_asset(name: str) -> str:
+        try:
+            return (
+                importlib.resources.files("aura.runtime")
+                .joinpath("prompts", name)
+                .read_text(encoding="utf-8", errors="replace")
+                .strip()
+            )
+        except Exception:
+            return ""
+
+    @classmethod
+    def _render_prompt_asset(cls, name: str, vars: dict[str, Any]) -> str:
+        template = cls._read_prompt_asset(name)
+        if not template:
+            return ""
+        rendered = template
+        for key, value in vars.items():
+            rendered = rendered.replace("{" + str(key) + "}", str(value))
+        return rendered.strip()
+
+    def _build_bid_eval_prompt(self, *, issue_key: str, bids: list[BidEntry]) -> str:
+        serialized_bids = [item.model_dump(mode="json") for item in bids]
+        bids_json = json.dumps(serialized_bids, ensure_ascii=False, indent=2, sort_keys=True)
+        template = self._render_prompt_asset(
+            "committee_bid_eval.md",
+            {
+                "issue_key": issue_key,
+                "bids_json": bids_json,
+            },
+        )
+        if template:
+            return template
+        return f"Issue key: {issue_key}\n\nBids JSON:\n{bids_json}"
+
+    @staticmethod
+    def _ranked_agents_from_eval_result(result: dict[str, Any], bids: list[BidEntry]) -> tuple[list[str], str, dict[str, str]]:
+        by_agent = {item.agent_id: item for item in bids}
+        ranked: list[str] = []
+
+        selected_agent = _clean_text(result.get("selected_agent"))
+        if selected_agent and selected_agent in by_agent:
+            ranked.append(selected_agent)
+
+        runner_up = _clean_text(result.get("runner_up"))
+        if runner_up and runner_up in by_agent and runner_up not in ranked:
+            ranked.append(runner_up)
+
+        raw_ranked = result.get("ranked_agent_ids")
+        if isinstance(raw_ranked, list):
+            for item in raw_ranked:
+                candidate = _clean_text(item)
+                if candidate and candidate in by_agent and candidate not in ranked:
+                    ranked.append(candidate)
+
+        for bid in bids:
+            if bid.agent_id not in ranked:
+                ranked.append(bid.agent_id)
+
+        reason = _clean_text(result.get("reason")) or "llm_bid_eval"
+        raw_rejections = result.get("rejection_reasons")
+        rejections: dict[str, str] = {}
+        if isinstance(raw_rejections, dict):
+            for agent_id, value in raw_rejections.items():
+                key = _clean_text(agent_id)
+                note = _clean_text(value)
+                if key and key in by_agent and note:
+                    rejections[key] = note
+        return ranked, reason, rejections
+
+    def _build_llm_ranker(self, *, meta: dict[str, Any]) -> BidRanker:
+        def _rank(issue_key: str, bids: list[BidEntry], record: BiddingRecord) -> list[BidEntry]:
+            del record
+            prompt = self._build_bid_eval_prompt(issue_key=issue_key, bids=bids)
+            meta["prompt_chars"] = len(prompt)
+            evaluator = self.bid_llm_evaluator
+            if not callable(evaluator):
+                meta["fallback_reason"] = "llm_evaluator_unavailable"
+                return []
+
+            payload_bids = [item.model_dump(mode="json") for item in bids]
+            try:
+                raw = evaluator(prompt=prompt, issue_key=issue_key, bids=payload_bids)
+            except TypeError:
+                try:
+                    raw = evaluator(prompt)
+                except Exception as exc:
+                    meta["fallback_reason"] = f"llm_eval_error:{exc}"
+                    return []
+            except Exception as exc:
+                meta["fallback_reason"] = f"llm_eval_error:{exc}"
+                return []
+
+            if not isinstance(raw, dict):
+                meta["fallback_reason"] = "llm_eval_invalid_payload"
+                return []
+
+            ranked_agents, reason, rejections = self._ranked_agents_from_eval_result(raw, bids)
+            by_agent = {item.agent_id: item for item in bids}
+            ranked_bids: list[BidEntry] = [by_agent[agent_id] for agent_id in ranked_agents if agent_id in by_agent]
+            if not ranked_bids:
+                meta["fallback_reason"] = "llm_eval_no_valid_winner"
+                return []
+            meta["llm_reason"] = reason
+            if rejections:
+                meta["llm_rejections"] = rejections
+            return ranked_bids
+
+        return _rank
+
     def evaluate_bids(self, *, issue_key: str, base_branch: str = "main") -> dict[str, Any]:
-        record, decision = self.bidding.evaluate(issue_key=issue_key)
+        llm_meta: dict[str, Any] = {}
+        use_llm = self.bid_evaluation_mode.startswith("llm")
+        if use_llm:
+            ranker = self._build_llm_ranker(meta=llm_meta)
+            record, decision = self.bidding.evaluate_with_ranker(
+                issue_key=issue_key,
+                rank_bids=ranker,
+                evaluation_mode=self.bid_evaluation_mode,
+            )
+        else:
+            record, decision = self.bidding.evaluate(issue_key=issue_key)
+
+        if decision.action == "assign" and decision.selected_agent:
+            llm_reason = _clean_text(llm_meta.get("llm_reason"))
+            if llm_reason:
+                decision = BiddingDecision(
+                    action=decision.action,
+                    selected_agent=decision.selected_agent,
+                    reason=llm_reason,
+                    rejection_reasons=decision.rejection_reasons,
+                )
+            llm_rejections = llm_meta.get("llm_rejections")
+            if isinstance(llm_rejections, dict) and llm_rejections:
+                updated = record.model_copy(update={"rejection_reasons": llm_rejections, "updated_at": now_ts_ms()})
+                self.bidding.store.save(updated)
+                record = updated
+                decision = BiddingDecision(
+                    action=decision.action,
+                    selected_agent=decision.selected_agent,
+                    reason=decision.reason,
+                    rejection_reasons=llm_rejections,
+                )
+
         payload: dict[str, Any] = {
             "ok": True,
             "issue_key": issue_key,
@@ -726,6 +921,8 @@ class CommitteeCoordinator:
             "reason": decision.reason,
             "evaluation_mode": self.bid_evaluation_mode,
         }
+        if llm_meta:
+            payload["llm_meta"] = dict(llm_meta)
 
         if decision.action == "assign" and decision.selected_agent:
             sandbox: Sandbox | None = None

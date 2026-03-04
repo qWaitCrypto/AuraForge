@@ -295,6 +295,25 @@ class BiddingService:
             rejection_reasons=rejection,
         )
 
+    def evaluate_with_ranker(
+        self,
+        *,
+        issue_key: str,
+        rank_bids: BidRanker,
+        evaluation_mode: str | None = None,
+        now_ms: int | None = None,
+    ) -> tuple[BiddingRecord, BiddingDecision]:
+        previous_ranker = self._rank_bids
+        previous_mode = self.evaluation_mode
+        self._rank_bids = rank_bids
+        if isinstance(evaluation_mode, str) and evaluation_mode.strip():
+            self.evaluation_mode = _clean_text(evaluation_mode).lower()
+        try:
+            return self.evaluate(issue_key=issue_key, now_ms=now_ms)
+        finally:
+            self._rank_bids = previous_ranker
+            self.evaluation_mode = previous_mode
+
     def mark_assigned(self, *, issue_key: str, selected_agent: str, now_ms: int | None = None) -> BiddingRecord:
         record = self.store.get(issue_key)
         if record is None:
