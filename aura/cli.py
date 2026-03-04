@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import os
 import shutil
+import signal
+import subprocess
 import sys
+import time
 from dataclasses import asdict, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -460,6 +464,47 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     recover_force_close_parser.add_argument("breaker_name", help="Breaker name (usually MCP server name).")
     recover_force_close_parser.set_defaults(func=_cmd_recover_force_close)
+
+    daemon_parser = subparsers.add_parser("daemon", help="Manage ControlHub daemon.")
+    daemon_subparsers = daemon_parser.add_subparsers(dest="daemon_cmd", required=True)
+    daemon_start_parser = daemon_subparsers.add_parser("start", help="Start ControlHub daemon.")
+    daemon_start_parser.add_argument(
+        "--foreground",
+        dest="foreground",
+        action="store_true",
+        help="Run in foreground (blocks current terminal).",
+    )
+    daemon_start_parser.add_argument("--poll-interval", dest="poll_interval_s", type=float, default=2.0)
+    daemon_start_parser.add_argument("--idle-timeout", dest="idle_timeout_s", type=float, default=300.0)
+    daemon_start_parser.add_argument("--max-agents", dest="max_concurrent_agents", type=int, default=5)
+    daemon_start_parser.add_argument("--probe-interval", dest="probe_interval_s", type=float, default=60.0)
+    daemon_start_parser.add_argument("--recovery-interval", dest="recovery_interval_s", type=float, default=120.0)
+    daemon_start_parser.set_defaults(func=_cmd_daemon_start)
+
+    daemon_run_parser = daemon_subparsers.add_parser("run", help=argparse.SUPPRESS)
+    daemon_run_parser.add_argument("--poll-interval", dest="poll_interval_s", type=float, default=2.0)
+    daemon_run_parser.add_argument("--idle-timeout", dest="idle_timeout_s", type=float, default=300.0)
+    daemon_run_parser.add_argument("--max-agents", dest="max_concurrent_agents", type=int, default=5)
+    daemon_run_parser.add_argument("--probe-interval", dest="probe_interval_s", type=float, default=60.0)
+    daemon_run_parser.add_argument("--recovery-interval", dest="recovery_interval_s", type=float, default=120.0)
+    daemon_run_parser.set_defaults(func=_cmd_daemon_run)
+
+    daemon_stop_parser = daemon_subparsers.add_parser("stop", help="Stop ControlHub daemon.")
+    daemon_stop_parser.set_defaults(func=_cmd_daemon_stop)
+
+    daemon_status_parser = daemon_subparsers.add_parser("status", help="Show ControlHub daemon status.")
+    daemon_status_parser.set_defaults(func=_cmd_daemon_status)
+
+    runner_parser = subparsers.add_parser("runner", help="Runner utilities.")
+    runner_subparsers = runner_parser.add_subparsers(dest="runner_cmd", required=True)
+    runner_sessions_parser = runner_subparsers.add_parser("sessions", help="Show runner session snapshot.")
+    runner_sessions_parser.set_defaults(func=_cmd_runner_sessions)
+    runner_wake_parser = runner_subparsers.add_parser("wake", help="Send one WAKE signal for debugging.")
+    runner_wake_parser.add_argument("--agent-id", dest="agent_id", required=True, help="Target agent id.")
+    runner_wake_parser.add_argument("--issue-key", dest="issue_key", required=True, help="Issue key.")
+    runner_wake_parser.add_argument("--brief", dest="brief", default="wake", help="Wake brief.")
+    runner_wake_parser.add_argument("--from-agent", dest="from_agent", default="runner.debug", help="Sender id.")
+    runner_wake_parser.set_defaults(func=_cmd_runner_wake)
 
     debug_parser = subparsers.add_parser("debug", help="Debug utilities.")
     debug_subparsers = debug_parser.add_subparsers(dest="debug_cmd", required=True)
@@ -2009,6 +2054,226 @@ def _cmd_recover_force_close(args: argparse.Namespace) -> int:
             sort_keys=True,
         )
     )
+    return EXIT_OK
+
+
+def _build_control_hub_from_args(*, project_root: Path, args: argparse.Namespace):
+    from .runtime.agent_runner import RunnerConfig
+    from .runtime.control_hub import ControlHub, ControlHubConfig
+
+    runner_cfg = RunnerConfig(
+        poll_interval_s=float(getattr(args, "poll_interval_s", 2.0) or 2.0),
+        idle_timeout_s=float(getattr(args, "idle_timeout_s", 300.0) or 300.0),
+        max_concurrent_agents=max(1, int(getattr(args, "max_concurrent_agents", 5) or 5)),
+    )
+    cfg = ControlHubConfig(
+        runner=runner_cfg,
+        probe_interval_s=float(getattr(args, "probe_interval_s", 60.0) or 60.0),
+        recovery_interval_s=float(getattr(args, "recovery_interval_s", 120.0) or 120.0),
+    )
+    return ControlHub(project_root=project_root, config=cfg)
+
+
+async def _run_control_hub_forever(*, project_root: Path, args: argparse.Namespace) -> None:
+    hub = _build_control_hub_from_args(project_root=project_root, args=args)
+    loop = asyncio.get_running_loop()
+
+    def _request_stop() -> None:
+        asyncio.create_task(hub.stop())
+
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            loop.add_signal_handler(sig, _request_stop)
+        except NotImplementedError:
+            # Windows fallback: rely on KeyboardInterrupt.
+            pass
+        except Exception:
+            pass
+
+    await hub.start()
+
+
+def _cmd_daemon_start(args: argparse.Namespace) -> int:
+    from .runtime.control_hub import ControlHub
+    from .runtime.project import RuntimePaths
+
+    try:
+        paths = RuntimePaths.discover()
+    except FileNotFoundError as e:
+        print(str(e), file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+
+    if ControlHub.is_running(paths.project_root):
+        print("ControlHub is already running.", file=sys.stderr)
+        return EXIT_DENIED
+
+    foreground = bool(getattr(args, "foreground", False))
+    if foreground:
+        return _cmd_daemon_run(args)
+
+    cmd = [
+        sys.executable,
+        "-m",
+        "aura.cli",
+        "daemon",
+        "run",
+        "--poll-interval",
+        str(float(getattr(args, "poll_interval_s", 2.0) or 2.0)),
+        "--idle-timeout",
+        str(float(getattr(args, "idle_timeout_s", 300.0) or 300.0)),
+        "--max-agents",
+        str(max(1, int(getattr(args, "max_concurrent_agents", 5) or 5))),
+        "--probe-interval",
+        str(float(getattr(args, "probe_interval_s", 60.0) or 60.0)),
+        "--recovery-interval",
+        str(float(getattr(args, "recovery_interval_s", 120.0) or 120.0)),
+    ]
+
+    log_path = paths.system_dir / "control_hub.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with log_path.open("a", encoding="utf-8") as log_handle:
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                cwd=str(paths.project_root),
+                stdin=subprocess.DEVNULL,
+                stdout=log_handle,
+                stderr=log_handle,
+                start_new_session=True,
+                close_fds=True,
+            )
+        except Exception as e:
+            print(str(e), file=sys.stderr)
+            return EXIT_ERROR
+
+    # Give the daemon a brief moment to write pid file.
+    deadline = time.time() + 2.0
+    while time.time() < deadline:
+        if ControlHub.is_running(paths.project_root):
+            break
+        time.sleep(0.05)
+
+    payload = {
+        "ok": ControlHub.is_running(paths.project_root),
+        "pid": proc.pid,
+        "log": str(log_path),
+    }
+    print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+    return EXIT_OK if bool(payload["ok"]) else EXIT_ERROR
+
+
+def _cmd_daemon_run(args: argparse.Namespace) -> int:
+    from .runtime.project import RuntimePaths
+
+    try:
+        paths = RuntimePaths.discover()
+    except FileNotFoundError as e:
+        print(str(e), file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+
+    try:
+        asyncio.run(_run_control_hub_forever(project_root=paths.project_root, args=args))
+    except KeyboardInterrupt:
+        return EXIT_OK
+    except Exception as e:
+        print(str(e), file=sys.stderr)
+        return EXIT_ERROR
+    return EXIT_OK
+
+
+def _cmd_daemon_stop(_: argparse.Namespace) -> int:
+    from .runtime.control_hub import ControlHub
+    from .runtime.project import RuntimePaths
+
+    try:
+        paths = RuntimePaths.discover()
+    except FileNotFoundError as e:
+        print(str(e), file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+
+    if not ControlHub.is_running(paths.project_root):
+        print(json.dumps({"ok": True, "running": False}, ensure_ascii=False, indent=2, sort_keys=True))
+        return EXIT_OK
+
+    if not ControlHub.stop_running(paths.project_root):
+        print("Failed to send stop signal to ControlHub.", file=sys.stderr)
+        return EXIT_ERROR
+
+    deadline = time.time() + 5.0
+    while time.time() < deadline:
+        if not ControlHub.is_running(paths.project_root):
+            break
+        time.sleep(0.1)
+
+    still_running = ControlHub.is_running(paths.project_root)
+    print(
+        json.dumps(
+            {
+                "ok": not still_running,
+                "running": still_running,
+            },
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return EXIT_OK if not still_running else EXIT_ERROR
+
+
+def _cmd_daemon_status(_: argparse.Namespace) -> int:
+    from .runtime.control_hub import ControlHub
+    from .runtime.project import RuntimePaths
+
+    try:
+        paths = RuntimePaths.discover()
+    except FileNotFoundError as e:
+        print(str(e), file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+
+    payload = ControlHub.status_snapshot(paths.project_root)
+    print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+    return EXIT_OK
+
+
+def _cmd_runner_sessions(_: argparse.Namespace) -> int:
+    from .runtime.agent_runner import load_runner_sessions_snapshot
+    from .runtime.project import RuntimePaths
+
+    try:
+        paths = RuntimePaths.discover()
+    except FileNotFoundError as e:
+        print(str(e), file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+
+    payload = load_runner_sessions_snapshot(project_root=paths.project_root)
+    print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+    return EXIT_OK
+
+
+def _cmd_runner_wake(args: argparse.Namespace) -> int:
+    from .runtime.models.signal import SignalType
+
+    control, error, code = _load_control_plane()
+    if control is None:
+        print(str(error), file=sys.stderr)
+        return code
+
+    agent_id = str(getattr(args, "agent_id", "") or "").strip()
+    issue_key = str(getattr(args, "issue_key", "") or "").strip()
+    brief = str(getattr(args, "brief", "wake") or "wake").strip() or "wake"
+    from_agent = str(getattr(args, "from_agent", "runner.debug") or "runner.debug").strip() or "runner.debug"
+    if not agent_id or not issue_key:
+        print("agent_id and issue_key are required.", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+
+    signal_obj = control.signal_bus.send(
+        from_agent=from_agent,
+        to_agent=agent_id,
+        signal_type=SignalType.WAKE,
+        brief=brief[:200],
+        issue_key=issue_key,
+    )
+    print(json.dumps({"ok": True, "signal": signal_obj.model_dump(mode="json")}, ensure_ascii=False, indent=2, sort_keys=True))
     return EXIT_OK
 
 

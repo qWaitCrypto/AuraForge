@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .agent_spec import AgentSpec
+from .agent_session import AgentSession, AgentSessionState
 from .capability import AgentCapabilitySurface, ROLE_INTEGRATOR, ROLE_WORKER
 from .context import AgentContext
 from .event_log import LogEvent, LogEventKind
@@ -15,6 +16,8 @@ from .workspec import WorkSpec
 
 __all__ = [
     "AgentSpec",
+    "AgentSession",
+    "AgentSessionState",
     "AgentCapabilitySurface",
     "AgentContext",
     "LogEvent",

@@ -47,7 +47,7 @@ from .llm.types import (
     ToolCall,
     ToolSpec,
 )
-from .models import ROLE_WORKER, Sandbox, WorkSpec
+from .models import ROLE_WORKER, Sandbox, Signal, WorkSpec
 from .models.event_log import LogEvent, LogEventKind
 from .orchestrator_helpers import (
     _canonical_request_to_redacted_dict,
@@ -1859,6 +1859,16 @@ class AgnoAsyncEngine:
         except Exception:
             return None
 
+    def _current_signal(self) -> Signal | None:
+        meta = self._session_metadata()
+        signal_id = str(meta.get("signal_id") or meta.get("current_signal_id") or "").strip()
+        if not signal_id:
+            return None
+        try:
+            return self.signal_bus.find_signal(signal_id)
+        except Exception:
+            return None
+
     def _is_workbench_bound_session(self) -> bool:
         return self._current_sandbox() is not None
 
@@ -1990,7 +2000,7 @@ class AgnoAsyncEngine:
                 built_context = self.context_builder.build(
                     surface=capability_surface,
                     sandbox=self._current_sandbox(),
-                    signal=None,
+                    signal=self._current_signal(),
                 )
             except Exception:
                 built_context = None
