@@ -165,6 +165,11 @@ class ContextBuilder:
             and str(signal.to_agent or "").strip() == "committee"
             and payload_type == "project_request"
         )
+        is_committee_task = (
+            signal is not None
+            and signal.signal_type is SignalType.WAKE
+            and payload_type in {"committee_task", "committee_rebid"}
+        )
 
         if is_project_request:
             base = self._render_prompt_asset(
@@ -180,6 +185,15 @@ class ContextBuilder:
                     "references": ", ".join(
                         [str(item).strip() for item in payload.get("references", []) if str(item).strip()]
                     ),
+                },
+            )
+        elif is_committee_task:
+            base = self._render_prompt_asset(
+                "task_bid.md",
+                {
+                    "issue_key": issue_key,
+                    "brief": brief,
+                    "your_agent_id": str(signal.to_agent or "unknown_agent") if signal is not None else "unknown_agent",
                 },
             )
 

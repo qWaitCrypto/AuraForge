@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from .committee import COMMITTEE_AGENT_ID, CommitteeCoordinator, is_project_request_signal
+from .committee import COMMITTEE_AGENT_ID, CommitteeCoordinator
 from .engine import Engine, ToolDecision, build_engine_for_session
 from .event_bus import EventBus
 from .event_log import EventLog, EventLogFileStore
@@ -360,29 +360,32 @@ class AgentRunner:
             self._write_sessions_snapshot()
 
     async def _handle_signal(self, *, agent_id: str, session: AgentSession, engine: Engine, signal: Signal) -> None:
-        if agent_id == COMMITTEE_AGENT_ID and is_project_request_signal(signal):
+        if agent_id == COMMITTEE_AGENT_ID:
             try:
                 decision = self._committee.handle_signal(signal)
             except Exception as exc:
                 self._append_metric(
-                    "committee_project_request_failed",
+                    "committee_signal_failed",
                     {
                         "agent_id": agent_id,
                         "session_id": session.session_id,
                         "signal_id": signal.signal_id,
+                        "signal_type": signal.signal_type.value,
                         "error": str(exc),
                     },
                 )
             else:
-                self._append_metric(
-                    "committee_project_request_processed",
-                    {
-                        "agent_id": agent_id,
-                        "session_id": session.session_id,
-                        "signal_id": signal.signal_id,
-                        "decision": decision,
-                    },
-                )
+                if bool(decision.get("handled")):
+                    self._append_metric(
+                        "committee_signal_processed",
+                        {
+                            "agent_id": agent_id,
+                            "session_id": session.session_id,
+                            "signal_id": signal.signal_id,
+                            "signal_type": signal.signal_type.value,
+                            "decision": decision,
+                        },
+                    )
 
         self._session_store.update_session(
             session.session_id,

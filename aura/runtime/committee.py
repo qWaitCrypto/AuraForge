@@ -8,8 +8,12 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from .bidding import BiddingConfig, BiddingDecision, BiddingService
 from .ids import new_id, now_ts_ms
+from .models.bidding import BiddingPhase
+from .models.sandbox import Sandbox
 from .models.signal import Signal, SignalType
+from .sandbox import SandboxManager
 from .signal import SignalBus
 
 COMMITTEE_AGENT_ID = "committee"
@@ -153,18 +157,30 @@ class CommitteeCoordinator:
     signal_bus: SignalBus
     store: CommitteeStore | None = None
     default_candidates: tuple[str, ...] = ("market_worker",)
+    bidding: BiddingService | None = None
+    sandbox_manager: Any | None = None
 
     def __post_init__(self) -> None:
         self.project_root = self.project_root.expanduser().resolve()
         if self.store is None:
             self.store = CommitteeStore(self.project_root)
+        if self.bidding is None:
+            self.bidding = BiddingService(project_root=self.project_root, config=BiddingConfig())
+        if self.sandbox_manager is None:
+            self.sandbox_manager = SandboxManager(project_root=self.project_root)
 
     def handle_signal(self, signal: Signal) -> dict[str, Any]:
         if signal.to_agent != COMMITTEE_AGENT_ID:
             return {"handled": False, "reason": "not_for_committee"}
-        if not is_project_request_signal(signal):
-            return {"handled": False, "reason": "unsupported_signal"}
+        payload = signal.payload if isinstance(signal.payload, dict) else {}
+        payload_type = _clean_text(payload.get("type")).lower()
+        if is_project_request_signal(signal):
+            return self._handle_project_request(signal)
+        if signal.signal_type is SignalType.NOTIFY and payload_type == "bid_comments":
+            return self._handle_bid_comments(signal)
+        return {"handled": False, "reason": "unsupported_signal"}
 
+    def _handle_project_request(self, signal: Signal) -> dict[str, Any]:
         request = self._request_from_signal(signal)
         self.store.upsert_request(request)
         self.store.append_activity(
@@ -196,6 +212,31 @@ class CommitteeCoordinator:
             "task_count": len(request.tasks),
             "wake_count": len(wake_ids),
             "wake_signal_ids": wake_ids,
+        }
+
+    def _handle_bid_comments(self, signal: Signal) -> dict[str, Any]:
+        payload = signal.payload if isinstance(signal.payload, dict) else {}
+        issue_key = _clean_text(payload.get("issue_key")) or _clean_text(signal.issue_key)
+        comments = payload.get("comments")
+        if not issue_key:
+            return {"handled": False, "reason": "missing_issue_key"}
+        if not isinstance(comments, list):
+            return {"handled": False, "reason": "missing_comments"}
+
+        collected = self.collect_bids(issue_key=issue_key, comments=comments)
+        auto_eval = bool(payload.get("auto_evaluate", True))
+        evaluated: dict[str, Any] | None = None
+        if auto_eval:
+            evaluated = self.evaluate_bids(
+                issue_key=issue_key,
+                base_branch=str(payload.get("base_branch") or "main").strip() or "main",
+            )
+        return {
+            "handled": True,
+            "kind": "bid_comments",
+            "issue_key": issue_key,
+            "collected": collected,
+            "evaluated": evaluated,
         }
 
     def _request_from_signal(self, signal: Signal) -> CommitteeRequest:
@@ -299,4 +340,109 @@ class CommitteeCoordinator:
                     },
                 )
                 wake_ids.append(signal.signal_id)
+            self.bidding.open(issue_key=task.issue_key, candidates=list(candidates))
         return wake_ids
+
+    def collect_bids(self, *, issue_key: str, comments: list[Any]) -> dict[str, Any]:
+        record = self.bidding.collect(issue_key=issue_key, comments=comments)
+        self.store.append_activity(
+            event="bids_collected",
+            payload={
+                "issue_key": issue_key,
+                "bid_count": len(record.bids),
+                "phase": record.phase.value,
+            },
+        )
+        return {
+            "ok": True,
+            "issue_key": issue_key,
+            "phase": record.phase.value,
+            "bid_count": len(record.bids),
+            "bids": [item.model_dump(mode="json") for item in record.bids],
+        }
+
+    def evaluate_bids(self, *, issue_key: str, base_branch: str = "main") -> dict[str, Any]:
+        record, decision = self.bidding.evaluate(issue_key=issue_key)
+        payload: dict[str, Any] = {
+            "ok": True,
+            "issue_key": issue_key,
+            "phase": record.phase.value,
+            "action": decision.action,
+            "selected_agent": decision.selected_agent,
+            "reason": decision.reason,
+        }
+
+        if decision.action == "assign" and decision.selected_agent:
+            sandbox: Sandbox | None = None
+            sandbox_error: str | None = None
+            try:
+                if self.sandbox_manager is not None:
+                    sandbox = self.sandbox_manager.create(
+                        agent_id=decision.selected_agent,
+                        issue_key=issue_key,
+                        base_branch=str(base_branch or "main").strip() or "main",
+                    )
+            except Exception as exc:
+                sandbox_error = str(exc)
+                sandbox = None
+            assign_signal = self.signal_bus.send(
+                from_agent=COMMITTEE_AGENT_ID,
+                to_agent=decision.selected_agent,
+                signal_type=SignalType.TASK_ASSIGNED,
+                brief=f"Task assigned for {issue_key}",
+                issue_key=issue_key,
+                sandbox_id=sandbox.sandbox_id if sandbox is not None else None,
+                payload={
+                    "type": "task_assigned",
+                    "issue_key": issue_key,
+                    "selected_agent": decision.selected_agent,
+                    "bidding_round": int(record.round),
+                },
+            )
+            assigned = self.bidding.mark_assigned(issue_key=issue_key, selected_agent=decision.selected_agent)
+            self.store.append_activity(
+                event="bid_assigned",
+                payload={
+                    "issue_key": issue_key,
+                    "selected_agent": decision.selected_agent,
+                    "signal_id": assign_signal.signal_id,
+                    "sandbox_id": sandbox.sandbox_id if sandbox is not None else None,
+                    "sandbox_error": sandbox_error,
+                },
+            )
+            payload.update(
+                {
+                    "phase": assigned.phase.value,
+                    "task_assigned_signal_id": assign_signal.signal_id,
+                    "sandbox_id": sandbox.sandbox_id if sandbox is not None else None,
+                    "sandbox_error": sandbox_error,
+                }
+            )
+            return payload
+
+        if decision.action == "rebid":
+            wake_ids: list[str] = []
+            for candidate in record.candidates:
+                signal = self.signal_bus.send(
+                    from_agent=COMMITTEE_AGENT_ID,
+                    to_agent=candidate,
+                    signal_type=SignalType.WAKE,
+                    brief=f"Rebid requested for {issue_key}",
+                    issue_key=issue_key,
+                    payload={"type": "committee_rebid", "issue_key": issue_key, "round": int(record.round)},
+                )
+                wake_ids.append(signal.signal_id)
+            record = record.model_copy(update={"phase": BiddingPhase.BIDDING, "wake_sent_at": now_ts_ms()})
+            self.bidding.store.save(record)
+            self.store.append_activity(
+                event="bid_rebid",
+                payload={"issue_key": issue_key, "round": int(record.round), "wake_count": len(wake_ids)},
+            )
+            payload.update({"phase": record.phase.value, "rebid_wake_signal_ids": wake_ids})
+            return payload
+
+        self.store.append_activity(
+            event="bid_evaluated",
+            payload={"issue_key": issue_key, "action": decision.action, "reason": decision.reason},
+        )
+        return payload

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .agent_spec import AgentSpec
 from .agent_session import AgentSession, AgentSessionState
+from .bidding import BidEntry, BiddingPhase, BiddingRecord
 from .capability import AgentCapabilitySurface, ROLE_INTEGRATOR, ROLE_WORKER
 from .context import AgentContext
 from .event_log import LogEvent, LogEventKind
@@ -22,6 +23,9 @@ __all__ = [
     "AgentContext",
     "LogEvent",
     "LogEventKind",
+    "BidEntry",
+    "BiddingPhase",
+    "BiddingRecord",
     "McpServerSpec",
     "Sandbox",
     "Signal",
