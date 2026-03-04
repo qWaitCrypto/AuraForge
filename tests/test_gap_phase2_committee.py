@@ -4,7 +4,7 @@ import asyncio
 from pathlib import Path
 
 from aura.runtime.agent_runner import AgentRunner
-from aura.runtime.committee import CommitteeCoordinator
+from aura.runtime.committee import CommitteeCoordinator, CommitteeRequestStatus
 from aura.runtime.engine import RunResult
 from aura.runtime.engine_agno_async import AgnoAsyncEngine
 from aura.runtime.event_bus import EventBus
@@ -139,9 +139,10 @@ def test_committee_coordinator_persists_request_and_dispatches_wakes(tmp_path: P
     requests = coordinator.store.list_requests(limit=10)
     assert len(requests) == 1
     request = requests[0]
-    assert request.status == "dispatched"
+    assert request.status is CommitteeRequestStatus.DISPATCHED
     assert len(request.tasks) == 2
     assert request.tasks[0].issue_key == "AUTO-AUTH-1"
+    assert request.tasks[0].issue_key_is_placeholder is False
 
     wakes = bus.query(from_agent="committee", signal_type=SignalType.WAKE, include_archive=True, limit=0)
     assert len(wakes) == 2
@@ -193,3 +194,84 @@ def test_runner_handles_committee_project_request_signal(tmp_path: Path) -> None
     assert len(wakes) == 1
     assert wakes[0].to_agent == "agent.ui"
     assert all(not engine.payloads for engine in created.values())
+
+
+def test_committee_generated_issue_key_is_placeholder(tmp_path: Path) -> None:
+    bus = SignalBus(store=SignalStore(project_root=tmp_path))
+    coordinator = CommitteeCoordinator(project_root=tmp_path, signal_bus=bus)
+
+    incoming = bus.send(
+        from_agent="super_agent",
+        to_agent="committee",
+        signal_type=SignalType.WAKE,
+        brief="New project request",
+        payload={
+            "type": "project_request",
+            "goal": "Refactor payment validation",
+            "context": "Split validation and persistence concerns.",
+            "candidate_agents": ["agent.payments"],
+        },
+    )
+
+    decision = coordinator.handle_signal(incoming)
+    assert decision["handled"] is True
+    assert decision["decomposition_mode"] == "coordinator_mvp"
+
+    requests = coordinator.store.list_requests(limit=10)
+    assert len(requests) == 1
+    task = requests[0].tasks[0]
+    assert task.issue_key.startswith("PLH-")
+    assert task.issue_key_is_placeholder is True
+    assert task.issue_key_source == "generated"
+
+    wakes = bus.query(from_agent="committee", signal_type=SignalType.WAKE, include_archive=True, limit=0)
+    assert len(wakes) == 1
+    assert wakes[0].payload is not None
+    assert wakes[0].payload.get("issue_key_is_placeholder") is True
+
+
+def test_committee_bid_check_signal_processes_open_bids(tmp_path: Path) -> None:
+    bus = SignalBus(store=SignalStore(project_root=tmp_path))
+    coordinator = CommitteeCoordinator(project_root=tmp_path, signal_bus=bus)
+
+    _ = coordinator.bidding.open(issue_key="PLH-BID-1", candidates=["agent.alpha"])
+    check_signal = bus.send(
+        from_agent="scheduler",
+        to_agent="committee",
+        signal_type=SignalType.NOTIFY,
+        brief="check bids",
+        payload={
+            "type": "check_bids",
+            "issue_keys": ["PLH-BID-1"],
+            "auto_evaluate": True,
+            "comments_by_issue": {
+                "PLH-BID-1": [
+                    {
+                        "id": "c1",
+                        "body": (
+                            "## 📋 BID\n"
+                            "```json\n"
+                            "{\n"
+                            '  "agent_id": "agent.alpha",\n'
+                            '  "confidence": "high",\n'
+                            '  "approach": "Implement and test in one pass.",\n'
+                            '  "deliverables": ["app/a.py"],\n'
+                            '  "estimated_files": 1,\n'
+                            '  "estimated_turns": 4\n'
+                            "}\n"
+                            "```\n"
+                        ),
+                    }
+                ]
+            },
+        },
+    )
+
+    result = coordinator.handle_signal(check_signal)
+    assert result["handled"] is True
+    assert result["kind"] == "bid_check"
+    assert result["processed_count"] == 1
+    issue_row = result["issues"][0]
+    assert issue_row["evaluated"] is not None
+    assert issue_row["evaluated"]["evaluation_mode"] == "heuristic_mvp"
+    assert issue_row["evaluated"]["action"] == "assign"

@@ -17,7 +17,8 @@ Raw payload:
 2. For each task, define required capabilities and likely touched areas/files.
 3. Use Linear MCP to create one issue per task when available.
 4. For each issue, find candidates with `spec__query` and wake them with `signal__send`.
-5. Keep decomposition specific and auditable; avoid vague tasks.
+5. In WAKE payload, make sure workers are asked to bid using fenced JSON format defined by `task_bid.md`.
+6. Keep decomposition specific and auditable; avoid vague tasks.
 
 ## Output format
 Respond with a concise execution report:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,7 @@ from .signal import SignalBus
 
 COMMITTEE_AGENT_ID = "committee"
 PROJECT_REQUEST_TYPE = "project_request"
+COMMITTEE_DECOMPOSITION_MODE = "coordinator_mvp"
 
 
 def _clean_text(value: Any) -> str:
@@ -61,6 +63,15 @@ class CommitteeTask(BaseModel):
     required_capabilities: list[str] = Field(default_factory=list)
     acceptance_criteria: list[str] = Field(default_factory=list)
     candidate_agents: list[str] = Field(default_factory=list)
+    issue_key_is_placeholder: bool = False
+    issue_key_source: str = "payload"
+
+
+class CommitteeRequestStatus(StrEnum):
+    PENDING = "pending"
+    QUEUED = "queued"
+    DISPATCHED = "dispatched"
+    COMPLETED = "completed"
 
 
 class CommitteeRequest(BaseModel):
@@ -72,7 +83,7 @@ class CommitteeRequest(BaseModel):
     constraints: list[str] = Field(default_factory=list)
     priority: str = "medium"
     references: list[str] = Field(default_factory=list)
-    status: str = "pending"
+    status: CommitteeRequestStatus = CommitteeRequestStatus.PENDING
     tasks: list[CommitteeTask] = Field(default_factory=list)
     wake_signal_ids: list[str] = Field(default_factory=list)
     created_at: int = Field(default_factory=now_ts_ms)
@@ -114,11 +125,21 @@ class CommitteeStore:
                 handle.write(json.dumps(item.model_dump(mode="json"), ensure_ascii=False, sort_keys=True) + "\n")
         tmp.replace(self._requests_path)
 
-    def list_requests(self, *, limit: int = 100, status: str | None = None) -> list[CommitteeRequest]:
+    def list_requests(
+        self,
+        *,
+        limit: int = 100,
+        status: CommitteeRequestStatus | str | None = None,
+    ) -> list[CommitteeRequest]:
         if not self._requests_path.exists():
             return []
         out: list[CommitteeRequest] = []
-        target_status = _clean_text(status).lower() if isinstance(status, str) else ""
+        if isinstance(status, CommitteeRequestStatus):
+            target_status = status.value
+        elif isinstance(status, str):
+            target_status = _clean_text(status).lower()
+        else:
+            target_status = ""
         for line in self._requests_path.read_text(encoding="utf-8").splitlines():
             if not line.strip():
                 continue
@@ -126,7 +147,7 @@ class CommitteeStore:
                 item = CommitteeRequest.model_validate_json(line)
             except Exception:
                 continue
-            if target_status and _clean_text(item.status).lower() != target_status:
+            if target_status and item.status.value != target_status:
                 continue
             out.append(item)
         out.sort(key=lambda item: item.created_at)
@@ -162,6 +183,7 @@ class CommitteeCoordinator:
     bidding: BiddingService | None = None
     sandbox_manager: Any | None = None
     notifications: NotificationStore | None = None
+    bid_evaluation_mode: str = "heuristic_mvp"
 
     def __post_init__(self) -> None:
         self.project_root = self.project_root.expanduser().resolve()
@@ -183,11 +205,16 @@ class CommitteeCoordinator:
             return self._handle_project_request(signal)
         if signal.signal_type is SignalType.NOTIFY and payload_type == "bid_comments":
             return self._handle_bid_comments(signal)
+        if signal.signal_type is SignalType.NOTIFY and payload_type in {"check_bids", "bid_check"}:
+            return self._handle_bid_check(signal)
         if signal.signal_type is SignalType.NOTIFY and self._is_task_completed_signal(signal):
             return self._handle_task_completed(signal)
         return {"handled": False, "reason": "unsupported_signal"}
 
     def _handle_project_request(self, signal: Signal) -> dict[str, Any]:
+        # Design choice (MVP): coordinator path owns project_request handling end-to-end.
+        # AgentRunner short-circuits when `handled=True`, so this signal is not processed again
+        # by the LLM chat loop in the same turn.
         request = self._request_from_signal(signal)
         self.store.upsert_request(request)
         self.store.append_activity(
@@ -200,25 +227,28 @@ class CommitteeCoordinator:
             },
         )
         wake_ids = self._dispatch_wakes(request=request)
-        status = "dispatched" if wake_ids else "queued"
+        status = CommitteeRequestStatus.DISPATCHED if wake_ids else CommitteeRequestStatus.QUEUED
         request = request.model_copy(update={"status": status, "wake_signal_ids": wake_ids, "updated_at": now_ts_ms()})
         self.store.upsert_request(request)
         self.store.append_activity(
             event="project_request_dispatched",
             payload={
                 "request_id": request.request_id,
-                "status": request.status,
+                "status": request.status.value,
                 "wake_count": len(wake_ids),
                 "issue_keys": [item.issue_key for item in request.tasks],
+                "decomposition_mode": COMMITTEE_DECOMPOSITION_MODE,
+                "placeholder_issue_keys": [item.issue_key for item in request.tasks if item.issue_key_is_placeholder],
             },
         )
         return {
             "handled": True,
             "request_id": request.request_id,
-            "status": request.status,
+            "status": request.status.value,
             "task_count": len(request.tasks),
             "wake_count": len(wake_ids),
             "wake_signal_ids": wake_ids,
+            "decomposition_mode": COMMITTEE_DECOMPOSITION_MODE,
         }
 
     def _handle_bid_comments(self, signal: Signal) -> dict[str, Any]:
@@ -244,6 +274,61 @@ class CommitteeCoordinator:
             "issue_key": issue_key,
             "collected": collected,
             "evaluated": evaluated,
+        }
+
+    def _handle_bid_check(self, signal: Signal) -> dict[str, Any]:
+        payload = signal.payload if isinstance(signal.payload, dict) else {}
+        comments_by_issue_raw = payload.get("comments_by_issue")
+        comments_by_issue = comments_by_issue_raw if isinstance(comments_by_issue_raw, dict) else {}
+        auto_evaluate = bool(payload.get("auto_evaluate", True))
+        force_evaluate = bool(payload.get("force_evaluate", False))
+
+        explicit_issue_keys = _clean_list(payload.get("issue_keys"))
+        issue_keys: list[str] = []
+        if explicit_issue_keys:
+            issue_keys = explicit_issue_keys
+        else:
+            seen: set[str] = set()
+            for phase in (BiddingPhase.BIDDING, BiddingPhase.REBID, BiddingPhase.EVALUATING):
+                for row in self.bidding.store.list(phase=phase, limit=0):
+                    if row.issue_key in seen:
+                        continue
+                    seen.add(row.issue_key)
+                    issue_keys.append(row.issue_key)
+
+        processed: list[dict[str, Any]] = []
+        for issue_key in issue_keys:
+            raw_comments = comments_by_issue.get(issue_key, [])
+            comments = raw_comments if isinstance(raw_comments, list) else []
+            collected = self.collect_bids(issue_key=issue_key, comments=comments)
+            evaluated: dict[str, Any] | None = None
+            should_evaluate = auto_evaluate and (
+                force_evaluate or bool(comments) or collected.get("phase") == BiddingPhase.EVALUATING.value
+            )
+            if should_evaluate:
+                evaluated = self.evaluate_bids(issue_key=issue_key, base_branch=str(payload.get("base_branch") or "main"))
+            processed.append(
+                {
+                    "issue_key": issue_key,
+                    "comment_count": len(comments),
+                    "collected": collected,
+                    "evaluated": evaluated,
+                }
+            )
+
+        self.store.append_activity(
+            event="bid_check_processed",
+            payload={
+                "signal_id": signal.signal_id,
+                "issues": [item["issue_key"] for item in processed],
+                "auto_evaluate": auto_evaluate,
+            },
+        )
+        return {
+            "handled": True,
+            "kind": "bid_check",
+            "processed_count": len(processed),
+            "issues": processed,
         }
 
     @staticmethod
@@ -428,6 +513,8 @@ class CommitteeCoordinator:
                         required_capabilities=required,
                         acceptance_criteria=acceptance,
                         candidate_agents=task_candidates,
+                        issue_key_is_placeholder=(not _clean_text(raw.get("issue_key"))),
+                        issue_key_source="payload" if _clean_text(raw.get("issue_key")) else "generated",
                     )
                 )
         if out:
@@ -441,13 +528,16 @@ class CommitteeCoordinator:
                 required_capabilities=_clean_list(payload.get("required_capabilities")),
                 acceptance_criteria=_clean_list(payload.get("acceptance_criteria")),
                 candidate_agents=list(candidates_global),
+                issue_key_is_placeholder=True,
+                issue_key_source="generated",
             )
         ]
 
     def _issue_key_for(self, *, request_id: str, index: int, goal: str) -> str:
         suffix = _slug_token(request_id)[-8:]
         goal_token = _slug_token(goal)[:8]
-        return f"AUTO-{goal_token}-{suffix}-{index + 1}"
+        # Placeholder key for local flow; Linear-backed integration should replace this with real issue keys.
+        return f"PLH-{goal_token}-{suffix}-{index + 1}"
 
     def _dispatch_wakes(self, *, request: CommitteeRequest) -> list[str]:
         wake_ids: list[str] = []
@@ -472,6 +562,7 @@ class CommitteeCoordinator:
                         "constraints": list(request.constraints),
                         "references": list(request.references),
                         "task": task.model_dump(mode="json"),
+                        "issue_key_is_placeholder": bool(task.issue_key_is_placeholder),
                     },
                 )
                 wake_ids.append(signal.signal_id)
@@ -505,6 +596,7 @@ class CommitteeCoordinator:
             "action": decision.action,
             "selected_agent": decision.selected_agent,
             "reason": decision.reason,
+            "evaluation_mode": self.bid_evaluation_mode,
         }
 
         if decision.action == "assign" and decision.selected_agent:
@@ -543,6 +635,7 @@ class CommitteeCoordinator:
                     "signal_id": assign_signal.signal_id,
                     "sandbox_id": sandbox.sandbox_id if sandbox is not None else None,
                     "sandbox_error": sandbox_error,
+                    "evaluation_mode": self.bid_evaluation_mode,
                 },
             )
             payload.update(
@@ -578,6 +671,11 @@ class CommitteeCoordinator:
 
         self.store.append_activity(
             event="bid_evaluated",
-            payload={"issue_key": issue_key, "action": decision.action, "reason": decision.reason},
+            payload={
+                "issue_key": issue_key,
+                "action": decision.action,
+                "reason": decision.reason,
+                "evaluation_mode": self.bid_evaluation_mode,
+            },
         )
         return payload
