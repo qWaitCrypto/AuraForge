@@ -30,3 +30,16 @@ python -m aura.runtime.examples.phase3_acceptance_check
 ```
 
 This command validates roadmap acceptance targets across Phase 0-3 and returns a JSON report with per-check PASS/FAIL.
+
+## End-to-End Showcase (Execution + Control Plane)
+
+```bash
+python -m aura.runtime.examples.end_to_end_showcase
+```
+
+What it demonstrates in one run:
+
+- Execution-plane E2E demo (`run_demo`): bidding signals, task assignment, sandbox work, and audit refs.
+- Control-plane E2E via CLI: `dispatch` (WAKE/TASK_ASSIGNED), `status --json`, `status agent`, `status issue`.
+- Probe/recovery loop: timeout policy + `probe --auto-recover` + dead letter visibility.
+- Circuit breaker loop: OPEN view in `status mcp` and manual reset via `recover force-close`.
