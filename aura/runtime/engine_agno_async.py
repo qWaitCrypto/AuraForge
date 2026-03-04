@@ -69,6 +69,7 @@ from .mcp.config import load_mcp_config
 from .tools import (
     AuditQueryTool,
     AuditRefsTool,
+    CommitteeSubmitTool,
     ProjectAIGCDetectTool,
     ProjectApplyEditsTool,
     ProjectApplyPatchTool,
@@ -176,6 +177,7 @@ _BASE_EXPOSED_TOOL_NAMES: set[str] = {
     "skill__list",
     "skill__load",
     "skill__read_file",
+    "committee__submit",
     # Audit / signal
     "audit__query",
     "audit__refs",
@@ -290,6 +292,7 @@ class AgnoAsyncEngine:
         registry.register(AuditRefsTool(event_log=self.event_log))
         registry.register(SignalSendTool(signal_bus=self.signal_bus))
         registry.register(SignalPollTool(signal_bus=self.signal_bus))
+        registry.register(CommitteeSubmitTool(signal_bus=self.signal_bus))
         registry.register(SkillListTool(self.skill_store))
         registry.register(SkillLoadTool(self.skill_store))
         registry.register(SkillReadFileTool(self.skill_store))

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from .committee import COMMITTEE_AGENT_ID, CommitteeCoordinator, is_project_request_signal
 from .engine import Engine, ToolDecision, build_engine_for_session
 from .event_bus import EventBus
 from .event_log import EventLog, EventLogFileStore
@@ -134,6 +135,7 @@ class AgentRunner:
         )
         self._event_bus = EventBus(event_log_store=self._event_log_store)
         self._audit_log = EventLog(store=EventLogFileStore(project_root=self._project_root))
+        self._committee = CommitteeCoordinator(project_root=self._project_root, signal_bus=self._signal_bus)
 
         self._state_dir = self._paths.state_dir / "runner"
         self._state_dir.mkdir(parents=True, exist_ok=True)
@@ -288,7 +290,7 @@ class AgentRunner:
         if session is None or engine is None or queue is None:
             return
 
-        idle_timeout = float(self._config.idle_timeout_s)
+        idle_timeout = -1.0 if agent_id == COMMITTEE_AGENT_ID else float(self._config.idle_timeout_s)
 
         try:
             while self._running:
@@ -358,6 +360,30 @@ class AgentRunner:
             self._write_sessions_snapshot()
 
     async def _handle_signal(self, *, agent_id: str, session: AgentSession, engine: Engine, signal: Signal) -> None:
+        if agent_id == COMMITTEE_AGENT_ID and is_project_request_signal(signal):
+            try:
+                decision = self._committee.handle_signal(signal)
+            except Exception as exc:
+                self._append_metric(
+                    "committee_project_request_failed",
+                    {
+                        "agent_id": agent_id,
+                        "session_id": session.session_id,
+                        "signal_id": signal.signal_id,
+                        "error": str(exc),
+                    },
+                )
+            else:
+                self._append_metric(
+                    "committee_project_request_processed",
+                    {
+                        "agent_id": agent_id,
+                        "session_id": session.session_id,
+                        "signal_id": signal.signal_id,
+                        "decision": decision,
+                    },
+                )
+
         self._session_store.update_session(
             session.session_id,
             {
@@ -500,7 +526,18 @@ class AgentRunner:
     @staticmethod
     def _signal_to_text(signal: Signal) -> str:
         issue_key = signal.issue_key or "UNKNOWN"
+        payload = signal.payload if isinstance(signal.payload, dict) else {}
         if signal.signal_type is SignalType.WAKE:
+            if (
+                str(signal.to_agent or "").strip() == COMMITTEE_AGENT_ID
+                and str(payload.get("type") or "").strip().lower() == "project_request"
+            ):
+                goal = str(payload.get("goal") or signal.brief or "project request").strip()
+                return (
+                    "Project request handed off to Committee.\n"
+                    f"Goal: {goal}\n"
+                    "Decompose into executable tasks, prepare issues, and wake matching candidates."
+                )
             return (
                 f"Wake signal received for issue {issue_key}.\n"
                 "Read the issue in Linear, evaluate fit against your capabilities, "

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.resources
+import json
 from pathlib import Path
 from typing import Any
 
@@ -156,7 +157,33 @@ class ContextBuilder:
         branch = sandbox.branch if sandbox is not None else ""
         brief = signal.brief if signal is not None else ""
 
-        if trigger == "wake":
+        payload = signal.payload if (signal is not None and isinstance(signal.payload, dict)) else {}
+        payload_type = str(payload.get("type") or "").strip().lower()
+        is_project_request = (
+            signal is not None
+            and signal.signal_type is SignalType.WAKE
+            and str(signal.to_agent or "").strip() == "committee"
+            and payload_type == "project_request"
+        )
+
+        if is_project_request:
+            base = self._render_prompt_asset(
+                "committee_decompose.md",
+                {
+                    "project_request": json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
+                    "goal": str(payload.get("goal") or "").strip(),
+                    "context": str(payload.get("context") or "").strip(),
+                    "constraints": ", ".join(
+                        [str(item).strip() for item in payload.get("constraints", []) if str(item).strip()]
+                    ),
+                    "priority": str(payload.get("priority") or "medium").strip(),
+                    "references": ", ".join(
+                        [str(item).strip() for item in payload.get("references", []) if str(item).strip()]
+                    ),
+                },
+            )
+
+        elif trigger == "wake":
             base = self._render_prompt_asset(
                 "task_wake.md",
                 {

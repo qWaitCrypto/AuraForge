@@ -44,6 +44,7 @@ __all__ = [
     "SkillReadFileTool",
     "SignalPollTool",
     "SignalSendTool",
+    "CommitteeSubmitTool",
     "SnapshotCreateTool",
     "SnapshotDiffTool",
     "SnapshotListTool",
@@ -97,6 +98,7 @@ _LAZY_EXPORTS: dict[str, tuple[str, str]] = {
     "AuditRefsTool": (".audit_tools", "AuditRefsTool"),
     "SignalSendTool": (".signal_tools", "SignalSendTool"),
     "SignalPollTool": (".signal_tools", "SignalPollTool"),
+    "CommitteeSubmitTool": (".committee_tools", "CommitteeSubmitTool"),
 }
 
 

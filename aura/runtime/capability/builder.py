@@ -13,6 +13,7 @@ from ..registry import ResolvedAgentBundle, SpecResolutionError, SpecResolver
 from ..tools.registry import ToolRegistry
 
 PLATFORM_BASE_TOOLS: list[str] = [
+    "committee__submit",
     "signal__send",
     "signal__poll",
     "audit__query",
