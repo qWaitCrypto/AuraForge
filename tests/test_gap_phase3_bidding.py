@@ -107,3 +107,67 @@ def test_committee_evaluate_bids_sends_task_assigned_signal(tmp_path: Path) -> N
     )
     assert len(assigned_signals) == 1
     assert assigned_signals[0].sandbox_id == "sb_AUTO-DASH-1_agent.ui"
+
+
+def test_bidding_service_uses_custom_ranker(tmp_path: Path) -> None:
+    seen: dict[str, object] = {}
+
+    def _custom_ranker(issue_key: str, bids, record):
+        seen["issue_key"] = issue_key
+        seen["round"] = record.round
+        seen["bid_count"] = len(bids)
+        return sorted(bids, key=lambda item: item.agent_id, reverse=True)
+
+    service = BiddingService(
+        project_root=tmp_path,
+        config=BiddingConfig(bidding_timeout_s=60, min_bids=1, max_bids=5),
+        rank_bids=_custom_ranker,
+        evaluation_mode="llm_stub",
+    )
+    issue_key = "AUTO-RANK-1"
+    _ = service.open(issue_key=issue_key, candidates=["agent.alpha", "agent.beta"])
+    _ = service.collect(
+        issue_key=issue_key,
+        comments=[
+            {"id": "c1", "body": _bid_comment(agent_id="agent.alpha", confidence="high", turns=2)},
+            {"id": "c2", "body": _bid_comment(agent_id="agent.beta", confidence="low", turns=20)},
+        ],
+    )
+
+    _, decision = service.evaluate(issue_key=issue_key)
+    assert decision.action == "assign"
+    assert decision.selected_agent == "agent.beta"
+    assert service.evaluation_mode == "llm_stub"
+    assert seen == {"issue_key": issue_key, "round": 1, "bid_count": 2}
+
+
+def test_committee_evaluation_mode_follows_bidding_service(tmp_path: Path) -> None:
+    bus = SignalBus(store=SignalStore(project_root=tmp_path))
+
+    def _custom_ranker(issue_key: str, bids, record):
+        del issue_key, record
+        return list(bids)
+
+    bidding = BiddingService(
+        project_root=tmp_path,
+        config=BiddingConfig(bidding_timeout_s=60, min_bids=1, max_bids=5),
+        rank_bids=_custom_ranker,
+        evaluation_mode="llm_stub",
+    )
+    coordinator = CommitteeCoordinator(
+        project_root=tmp_path,
+        signal_bus=bus,
+        bidding=bidding,
+        sandbox_manager=_FakeSandboxManager(),
+    )
+
+    issue_key = "AUTO-EVAL-1"
+    _ = coordinator.bidding.open(issue_key=issue_key, candidates=["agent.eval"])
+    _ = coordinator.collect_bids(
+        issue_key=issue_key,
+        comments=[{"id": "c1", "body": _bid_comment(agent_id="agent.eval", confidence="high", turns=4)}],
+    )
+
+    result = coordinator.evaluate_bids(issue_key=issue_key)
+    assert result["action"] == "assign"
+    assert result["evaluation_mode"] == "llm_stub"

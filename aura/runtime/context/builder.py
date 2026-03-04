@@ -12,11 +12,6 @@ from ..models.signal import Signal, SignalType
 from ..registry import SpecResolver
 
 
-class _SafeDict(dict[str, Any]):
-    def __missing__(self, key: str) -> str:
-        return "{" + key + "}"
-
-
 class ContextBuilder:
     """
     Assemble layered prompt context for agent sessions.
@@ -301,10 +296,10 @@ class ContextBuilder:
         template = self._read_prompt_asset(name)
         if not template:
             return ""
-        try:
-            return template.format_map(_SafeDict(vars)).strip()
-        except Exception:
-            return template.strip()
+        rendered = template
+        for key, value in vars.items():
+            rendered = rendered.replace("{" + str(key) + "}", str(value))
+        return rendered.strip()
 
     @staticmethod
     def _truncate(text: str, max_chars: int) -> str:

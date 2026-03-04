@@ -4,7 +4,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .ids import now_ts_ms
 from .models.bidding import BidEntry, BiddingPhase, BiddingRecord
@@ -50,6 +50,9 @@ class BiddingDecision:
     selected_agent: str | None = None
     reason: str | None = None
     rejection_reasons: dict[str, str] | None = None
+
+
+BidRanker = Callable[[str, list[BidEntry], BiddingRecord], list[BidEntry]]
 
 
 class BiddingStore:
@@ -154,6 +157,7 @@ def _extract_comment_fields(comment: Any) -> tuple[str, str | None, str | None]:
     if not isinstance(comment, dict):
         return "", None, None
     body = ""
+    # Linear comment payloads expose Markdown in `body`; `content/text` are compatibility fallbacks.
     for key in ("body", "content", "text"):
         candidate = comment.get(key)
         if isinstance(candidate, str) and candidate.strip():
@@ -165,12 +169,18 @@ def _extract_comment_fields(comment: Any) -> tuple[str, str | None, str | None]:
 
 
 def _score_bid(entry: BidEntry) -> int:
+    # MVP heuristic only. Keep deterministic ranking now and replace with LLM bid-eval later.
     confidence = {"high": 3, "medium": 2, "low": 1}.get(entry.confidence, 0)
     deliverables = min(10, len(entry.deliverables))
     approach_bonus = 1 if len(entry.approach) >= 32 else 0
     turn_penalty = min(50, max(0, int(entry.estimated_turns)))
     file_penalty = min(20, max(0, int(entry.estimated_files // 4)))
     return confidence * 100 + deliverables * 5 + approach_bonus * 10 - turn_penalty - file_penalty
+
+
+def _heuristic_rank_bids(issue_key: str, bids: list[BidEntry], record: BiddingRecord) -> list[BidEntry]:
+    del issue_key, record
+    return sorted(bids, key=_score_bid, reverse=True)
 
 
 class BiddingService:
@@ -180,10 +190,14 @@ class BiddingService:
         project_root: Path,
         store: BiddingStore | None = None,
         config: BiddingConfig | None = None,
+        rank_bids: BidRanker | None = None,
+        evaluation_mode: str = "heuristic_mvp",
     ) -> None:
         self._project_root = project_root.expanduser().resolve()
         self.store = store or BiddingStore(project_root=self._project_root)
         self.config = config or BiddingConfig()
+        self._rank_bids = rank_bids or _heuristic_rank_bids
+        self.evaluation_mode = _clean_text(evaluation_mode).lower() or "heuristic_mvp"
 
     def open(self, *, issue_key: str, candidates: list[str], now_ms: int | None = None) -> BiddingRecord:
         now = int(now_ms or now_ts_ms())
@@ -206,6 +220,7 @@ class BiddingService:
         if record is None:
             record = self.open(issue_key=issue_key, candidates=[], now_ms=now_ms)
 
+        # Intentional: one active bid per agent per issue; later bids replace earlier bids from same agent.
         merged: dict[str, BidEntry] = {entry.agent_id: entry for entry in record.bids}
         for idx, comment in enumerate(comments):
             body, comment_id, comment_ref = _extract_comment_fields(comment)
@@ -241,6 +256,7 @@ class BiddingService:
                 self.store.save(pending)
                 return pending, BiddingDecision(action="wait", reason="waiting_for_more_bids")
             if int(record.round) <= int(self.config.max_rebid_rounds):
+                # Intentional: keep prior valid bids across rebid rounds so existing candidates remain eligible.
                 rebid = record.model_copy(
                     update={
                         "phase": BiddingPhase.REBID,
@@ -255,7 +271,9 @@ class BiddingService:
             self.store.save(failed)
             return failed, BiddingDecision(action="failed", reason="insufficient_bids_after_retries")
 
-        ranked = sorted(bids, key=_score_bid, reverse=True)
+        ranked = list(self._rank_bids(issue_key, bids, record))
+        if not ranked:
+            ranked = _heuristic_rank_bids(issue_key, bids, record)
         winner = ranked[0]
         rejection: dict[str, str] = {}
         for entry in ranked[1:]:

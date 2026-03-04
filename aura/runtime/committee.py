@@ -191,6 +191,13 @@ class CommitteeCoordinator:
             self.store = CommitteeStore(self.project_root)
         if self.bidding is None:
             self.bidding = BiddingService(project_root=self.project_root, config=BiddingConfig())
+        configured_mode = _clean_text(self.bid_evaluation_mode).lower()
+        bidding_mode = _clean_text(getattr(self.bidding, "evaluation_mode", "")).lower()
+        if not configured_mode:
+            self.bid_evaluation_mode = bidding_mode or "heuristic_mvp"
+        elif configured_mode == "heuristic_mvp" and bidding_mode and bidding_mode != "heuristic_mvp":
+            # Keep coordinator default aligned with non-default bidding evaluator mode.
+            self.bid_evaluation_mode = bidding_mode
         if self.sandbox_manager is None:
             self.sandbox_manager = SandboxManager(project_root=self.project_root)
         if self.notifications is None:
