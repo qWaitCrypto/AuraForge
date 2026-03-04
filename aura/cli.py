@@ -506,6 +506,17 @@ def _build_parser() -> argparse.ArgumentParser:
     runner_wake_parser.add_argument("--from-agent", dest="from_agent", default="runner.debug", help="Sender id.")
     runner_wake_parser.set_defaults(func=_cmd_runner_wake)
 
+    notifications_parser = subparsers.add_parser("notifications", help="List and manage user notifications.")
+    notifications_parser.add_argument("--json", dest="as_json", action="store_true", help="Print notifications as JSON.")
+    notifications_parser.add_argument("--unread", dest="unread_only", action="store_true", help="Show only unread notifications.")
+    notifications_parser.add_argument(
+        "--mark-read",
+        dest="mark_read",
+        default=None,
+        help="Mark one notification as read by notification id.",
+    )
+    notifications_parser.set_defaults(func=_cmd_notifications)
+
     debug_parser = subparsers.add_parser("debug", help="Debug utilities.")
     debug_subparsers = debug_parser.add_subparsers(dest="debug_cmd", required=True)
     debug_export_parser = debug_subparsers.add_parser("export", help="Export a replay bundle.")
@@ -2274,6 +2285,57 @@ def _cmd_runner_wake(args: argparse.Namespace) -> int:
         issue_key=issue_key,
     )
     print(json.dumps({"ok": True, "signal": signal_obj.model_dump(mode="json")}, ensure_ascii=False, indent=2, sort_keys=True))
+    return EXIT_OK
+
+
+def _cmd_notifications(args: argparse.Namespace) -> int:
+    from .runtime.notifications import NotificationStore
+    from .runtime.project import RuntimePaths
+
+    try:
+        paths = RuntimePaths.discover()
+    except FileNotFoundError as e:
+        print(str(e), file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+
+    store = NotificationStore(project_root=paths.project_root)
+    mark_read = str(getattr(args, "mark_read", "") or "").strip()
+    if mark_read:
+        updated = store.mark_read(mark_read)
+        if updated is None:
+            print(json.dumps({"ok": False, "error": "notification_not_found", "notification_id": mark_read}, ensure_ascii=False, indent=2, sort_keys=True))
+            return EXIT_ERROR
+        print(json.dumps({"ok": True, "notification": updated.model_dump(mode="json")}, ensure_ascii=False, indent=2, sort_keys=True))
+        return EXIT_OK
+
+    unread_only = bool(getattr(args, "unread_only", False))
+    rows = store.list(unread_only=unread_only, limit=200)
+    if bool(getattr(args, "as_json", False)):
+        print(
+            json.dumps(
+                {
+                    "ok": True,
+                    "count": len(rows),
+                    "notifications": [item.model_dump(mode="json") for item in rows],
+                },
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return EXIT_OK
+
+    if not rows:
+        print("No notifications.")
+        return EXIT_OK
+
+    for item in rows:
+        status = "NEW" if not item.read else "READ"
+        issue = f" [{item.issue_key}]" if isinstance(item.issue_key, str) and item.issue_key.strip() else ""
+        print(f"[{status}] {item.notification_id}{issue} {item.title}")
+        print(f"  {item.summary}")
+        if isinstance(item.pr_url, str) and item.pr_url.strip():
+            print(f"  PR: {item.pr_url}")
     return EXIT_OK
 
 

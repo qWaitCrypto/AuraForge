@@ -8,11 +8,13 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from .bidding import BiddingConfig, BiddingDecision, BiddingService
+from .bidding import BiddingConfig, BiddingService
 from .ids import new_id, now_ts_ms
 from .models.bidding import BiddingPhase
+from .models.notification import NotificationType
 from .models.sandbox import Sandbox
 from .models.signal import Signal, SignalType
+from .notifications import NotificationStore
 from .sandbox import SandboxManager
 from .signal import SignalBus
 
@@ -159,6 +161,7 @@ class CommitteeCoordinator:
     default_candidates: tuple[str, ...] = ("market_worker",)
     bidding: BiddingService | None = None
     sandbox_manager: Any | None = None
+    notifications: NotificationStore | None = None
 
     def __post_init__(self) -> None:
         self.project_root = self.project_root.expanduser().resolve()
@@ -168,6 +171,8 @@ class CommitteeCoordinator:
             self.bidding = BiddingService(project_root=self.project_root, config=BiddingConfig())
         if self.sandbox_manager is None:
             self.sandbox_manager = SandboxManager(project_root=self.project_root)
+        if self.notifications is None:
+            self.notifications = NotificationStore(project_root=self.project_root)
 
     def handle_signal(self, signal: Signal) -> dict[str, Any]:
         if signal.to_agent != COMMITTEE_AGENT_ID:
@@ -178,6 +183,8 @@ class CommitteeCoordinator:
             return self._handle_project_request(signal)
         if signal.signal_type is SignalType.NOTIFY and payload_type == "bid_comments":
             return self._handle_bid_comments(signal)
+        if signal.signal_type is SignalType.NOTIFY and self._is_task_completed_signal(signal):
+            return self._handle_task_completed(signal)
         return {"handled": False, "reason": "unsupported_signal"}
 
     def _handle_project_request(self, signal: Signal) -> dict[str, Any]:
@@ -237,6 +244,134 @@ class CommitteeCoordinator:
             "issue_key": issue_key,
             "collected": collected,
             "evaluated": evaluated,
+        }
+
+    @staticmethod
+    def _is_task_completed_signal(signal: Signal) -> bool:
+        payload = signal.payload if isinstance(signal.payload, dict) else {}
+        payload_type = _clean_text(payload.get("type")).lower()
+        if payload_type in {"task_completed", "work_completed", "completion"}:
+            return True
+        brief = _clean_text(signal.brief).lower()
+        return "task_completed" in brief or "completed" in brief
+
+    def _handle_task_completed(self, signal: Signal) -> dict[str, Any]:
+        payload = signal.payload if isinstance(signal.payload, dict) else {}
+        issue_key = _clean_text(payload.get("issue_key")) or _clean_text(signal.issue_key)
+        if not issue_key:
+            return {"handled": False, "reason": "missing_issue_key"}
+        worker_agent = _clean_text(signal.from_agent) or "worker"
+
+        decision = payload.get("decision")
+        accept: bool
+        if isinstance(decision, str) and decision.strip():
+            accept = decision.strip().lower() in {"accept", "approved", "pass"}
+        elif isinstance(payload.get("accept"), bool):
+            accept = bool(payload.get("accept"))
+        else:
+            accept = True
+
+        if accept:
+            summary = _clean_text(payload.get("summary")) or f"{issue_key} completed by {worker_agent}."
+            notification = self.notifications.create(
+                notification_type=NotificationType.TASK_COMPLETED,
+                title=f"{issue_key} completed",
+                summary=summary,
+                issue_key=issue_key,
+                pr_url=_clean_text(payload.get("pr_url")) or None,
+                details={
+                    "agent_id": worker_agent,
+                    "sandbox_id": signal.sandbox_id,
+                    "signal_id": signal.signal_id,
+                },
+            )
+            user_signal = self.signal_bus.send(
+                from_agent=COMMITTEE_AGENT_ID,
+                to_agent="super_agent",
+                signal_type=SignalType.NOTIFY,
+                brief=f"Task completed: {issue_key}"[:200],
+                issue_key=issue_key,
+                payload={
+                    "type": "task_completed",
+                    "issue_key": issue_key,
+                    "agent_id": worker_agent,
+                    "summary": summary,
+                    "notification_id": notification.notification_id,
+                    "pr_url": _clean_text(payload.get("pr_url")) or None,
+                },
+            )
+
+            cleanup_error: str | None = None
+            if bool(payload.get("cleanup_sandbox")) and isinstance(signal.sandbox_id, str) and signal.sandbox_id.strip():
+                try:
+                    if self.sandbox_manager is not None:
+                        self.sandbox_manager.destroy(signal.sandbox_id.strip())
+                except Exception as exc:
+                    cleanup_error = str(exc)
+            self.store.append_activity(
+                event="completion_accepted",
+                payload={
+                    "issue_key": issue_key,
+                    "agent_id": worker_agent,
+                    "notification_id": notification.notification_id,
+                    "notify_signal_id": user_signal.signal_id,
+                    "cleanup_error": cleanup_error,
+                },
+            )
+            return {
+                "handled": True,
+                "kind": "task_completed",
+                "decision": "accept",
+                "issue_key": issue_key,
+                "notification_id": notification.notification_id,
+                "notify_signal_id": user_signal.signal_id,
+                "cleanup_error": cleanup_error,
+            }
+
+        feedback = _clean_text(payload.get("feedback")) or _clean_text(payload.get("reason")) or "Revisions required."
+        revision_signal = self.signal_bus.send(
+            from_agent=COMMITTEE_AGENT_ID,
+            to_agent=worker_agent,
+            signal_type=SignalType.WAKE,
+            brief=f"Revisions needed for {issue_key}"[:200],
+            issue_key=issue_key,
+            sandbox_id=signal.sandbox_id,
+            payload={
+                "type": "revision_request",
+                "issue_key": issue_key,
+                "feedback": feedback,
+                "original_signal_id": signal.signal_id,
+            },
+        )
+        notification = self.notifications.create(
+            notification_type=NotificationType.REVIEW_NEEDED,
+            title=f"{issue_key} needs revisions",
+            summary=feedback,
+            issue_key=issue_key,
+            details={
+                "agent_id": worker_agent,
+                "sandbox_id": signal.sandbox_id,
+                "revision_signal_id": revision_signal.signal_id,
+            },
+        )
+        self.store.append_activity(
+            event="completion_rejected",
+            payload={
+                "issue_key": issue_key,
+                "agent_id": worker_agent,
+                "feedback": feedback,
+                "revision_signal_id": revision_signal.signal_id,
+                "notification_id": notification.notification_id,
+            },
+        )
+        return {
+            "handled": True,
+            "kind": "task_completed",
+            "decision": "reject",
+            "issue_key": issue_key,
+            "feedback": feedback,
+            "revision_signal_id": revision_signal.signal_id,
+            "notification_id": notification.notification_id,
         }
 
     def _request_from_signal(self, signal: Signal) -> CommitteeRequest:

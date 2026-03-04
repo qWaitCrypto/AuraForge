@@ -7,6 +7,7 @@ from .capability import AgentCapabilitySurface, ROLE_INTEGRATOR, ROLE_WORKER
 from .context import AgentContext
 from .event_log import LogEvent, LogEventKind
 from .mcp_spec import McpServerSpec
+from .notification import NotificationType, UserNotification
 from .sandbox import Sandbox
 from .skill_spec import SkillSpec
 from .signal import Signal, SignalType
@@ -27,6 +28,7 @@ __all__ = [
     "BiddingPhase",
     "BiddingRecord",
     "McpServerSpec",
+    "NotificationType",
     "Sandbox",
     "Signal",
     "SignalType",
@@ -34,6 +36,7 @@ __all__ = [
     "TaskResult",
     "TaskSpec",
     "ToolSpec",
+    "UserNotification",
     "ROLE_INTEGRATOR",
     "ROLE_WORKER",
     "WorkSpec",
