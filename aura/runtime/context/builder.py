@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.resources
 import json
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -154,16 +155,29 @@ class ContextBuilder:
 
         payload = signal.payload if (signal is not None and isinstance(signal.payload, dict)) else {}
         payload_type = str(payload.get("type") or "").strip().lower()
+        is_committee_target = signal is not None and str(signal.to_agent or "").strip() == "committee"
         is_project_request = (
             signal is not None
             and signal.signal_type is SignalType.WAKE
-            and str(signal.to_agent or "").strip() == "committee"
+            and is_committee_target
             and payload_type == "project_request"
         )
         is_committee_task = (
             signal is not None
             and signal.signal_type is SignalType.WAKE
             and payload_type in {"committee_task", "committee_rebid"}
+        )
+        is_committee_bid_check = (
+            signal is not None
+            and signal.signal_type is SignalType.NOTIFY
+            and is_committee_target
+            and payload_type in {"bid_check", "check_bids", "bid_comments"}
+        )
+        is_committee_verify = (
+            signal is not None
+            and signal.signal_type is SignalType.NOTIFY
+            and is_committee_target
+            and payload_type in {"task_completed", "work_completed", "completion"}
         )
 
         if is_project_request:
@@ -180,6 +194,32 @@ class ContextBuilder:
                     "references": ", ".join(
                         [str(item).strip() for item in payload.get("references", []) if str(item).strip()]
                     ),
+                    "workspace_repo": self._workspace_repo_hint(),
+                },
+            )
+        elif is_committee_bid_check:
+            base = self._render_prompt_asset(
+                "committee_bid_eval.md",
+                {
+                    "issue_key": str(payload.get("issue_key") or issue_key).strip(),
+                    "bids_json": json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
+                    "signal_payload": json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
+                },
+            )
+        elif is_committee_verify:
+            acceptance = payload.get("acceptance_criteria")
+            if not isinstance(acceptance, list):
+                acceptance = []
+            base = self._render_prompt_asset(
+                "committee_verify.md",
+                {
+                    "issue_key": str(payload.get("issue_key") or issue_key).strip(),
+                    "agent_id": str(signal.from_agent or "").strip() if signal is not None else "",
+                    "sandbox_id": str(signal.sandbox_id or sandbox_id).strip(),
+                    "acceptance_criteria": json.dumps(acceptance, ensure_ascii=False, indent=2, sort_keys=True),
+                    "audit_summary": str(payload.get("audit_summary") or payload.get("audit_evidence") or "").strip(),
+                    "snapshot_summary": str(payload.get("snapshot_summary") or payload.get("snapshot_diff") or "").strip(),
+                    "signal_payload": json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
                 },
             )
         elif is_committee_task:
@@ -330,6 +370,22 @@ class ContextBuilder:
         if max_chars > 0 and len(text) > max_chars:
             return text[:max_chars]
         return text
+
+    def _workspace_repo_hint(self) -> str:
+        try:
+            proc = subprocess.run(
+                ["git", "remote", "get-url", "origin"],
+                cwd=self._project_root,
+                text=True,
+                capture_output=True,
+                timeout=2,
+            )
+        except Exception:
+            return "unknown"
+        if proc.returncode != 0:
+            return "unknown"
+        text = str(proc.stdout or "").strip()
+        return text or "unknown"
 
     @staticmethod
     def _infer_trigger(signal: Signal | None) -> str:

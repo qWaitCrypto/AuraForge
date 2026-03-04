@@ -84,6 +84,7 @@ class RunnerApprovalPolicy:
         return RunnerApprovalPolicy(
             auto_approve=(
                 "mcp__*linear*",
+                "mcp__*github*",
                 "signal__send",
                 "signal__poll",
                 "audit__query",
@@ -136,7 +137,11 @@ class AgentRunner:
         )
         self._event_bus = EventBus(event_log_store=self._event_log_store)
         self._audit_log = EventLog(store=EventLogFileStore(project_root=self._project_root))
-        self._committee = CommitteeCoordinator(project_root=self._project_root, signal_bus=self._signal_bus)
+        self._committee = CommitteeCoordinator(
+            project_root=self._project_root,
+            signal_bus=self._signal_bus,
+            coordinator_mode="thin_router",
+        )
 
         self._state_dir = self._paths.state_dir / "runner"
         self._state_dir.mkdir(parents=True, exist_ok=True)
@@ -416,10 +421,13 @@ class AgentRunner:
     async def _handle_signal(self, *, agent_id: str, session: AgentSession, engine: Engine, signal: Signal) -> bool:
         if agent_id == COMMITTEE_AGENT_ID:
             try:
-                decision = await self._committee.ahandle_signal(signal)
+                decision = self._committee.prepare_context(
+                    signal=signal,
+                    session_id=session.session_id,
+                )
             except Exception as exc:
                 self._append_metric(
-                    "committee_signal_failed",
+                    "committee_prepare_failed",
                     {
                         "agent_id": agent_id,
                         "session_id": session.session_id,
@@ -429,18 +437,16 @@ class AgentRunner:
                     },
                 )
             else:
-                if bool(decision.get("handled")):
-                    self._append_metric(
-                        "committee_signal_processed",
-                        {
-                            "agent_id": agent_id,
-                            "session_id": session.session_id,
-                            "signal_id": signal.signal_id,
-                            "signal_type": signal.signal_type.value,
-                            "decision": decision,
-                        },
-                    )
-                    return True
+                self._append_metric(
+                    "committee_signal_prepared",
+                    {
+                        "agent_id": agent_id,
+                        "session_id": session.session_id,
+                        "signal_id": signal.signal_id,
+                        "signal_type": signal.signal_type.value,
+                        "decision": decision,
+                    },
+                )
 
         # Update metadata before engine.arun so ContextBuilder can resolve `signal_id`
         # from the session record for this turn's prompt assembly.
@@ -545,6 +551,26 @@ class AgentRunner:
                 "error": run.error,
             },
         )
+        if agent_id == COMMITTEE_AGENT_ID:
+            try:
+                self._committee.post_process(
+                    signal=signal,
+                    session_id=session.session_id,
+                    run_status=str(run.status or ""),
+                    run_id=str(run.run_id or ""),
+                    error=str(run.error or "") or None,
+                )
+            except Exception as exc:
+                self._append_metric(
+                    "committee_post_process_failed",
+                    {
+                        "agent_id": agent_id,
+                        "session_id": session.session_id,
+                        "signal_id": signal.signal_id,
+                        "signal_type": signal.signal_type.value,
+                        "error": str(exc),
+                    },
+                )
         return True
 
     async def _reap_finished_sessions(self) -> None:
