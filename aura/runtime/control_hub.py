@@ -37,12 +37,14 @@ class ControlHub:
         )
 
         self._pid_path = self._project_root / ".aura" / "control_hub.pid"
+        self._stop_path = self._project_root / ".aura" / "control_hub.stop"
         self._pid_path.parent.mkdir(parents=True, exist_ok=True)
 
         self._running = False
         self._runner_task: asyncio.Task[None] | None = None
         self._probe_task: asyncio.Task[None] | None = None
         self._recovery_task: asyncio.Task[None] | None = None
+        self._stop_task: asyncio.Task[None] | None = None
 
     @property
     def control_plane(self) -> ControlPlane:
@@ -56,16 +58,19 @@ class ControlHub:
         if self._running:
             return
         self._running = True
+        self._remove_stop_file()
         self.write_pid_file()
 
         self._runner_task = asyncio.create_task(self._runner.start(), name="control_hub:runner")
         self._probe_task = asyncio.create_task(self._probe_loop(), name="control_hub:probe")
         self._recovery_task = asyncio.create_task(self._recovery_loop(), name="control_hub:recovery")
+        self._stop_task = asyncio.create_task(self._stop_watcher_loop(), name="control_hub:stop")
 
         try:
-            await asyncio.gather(self._runner_task, self._probe_task, self._recovery_task)
+            await asyncio.gather(self._runner_task, self._probe_task, self._recovery_task, self._stop_task)
         finally:
             self.remove_pid_file()
+            self._remove_stop_file()
             self._running = False
 
     async def stop(self) -> None:
@@ -74,13 +79,20 @@ class ControlHub:
         self._running = False
         await self._runner.stop()
 
-        tasks = [self._probe_task, self._recovery_task, self._runner_task]
+        current = asyncio.current_task()
+        tasks = [self._probe_task, self._recovery_task, self._runner_task, self._stop_task]
+        wait_tasks: list[asyncio.Task[None]] = []
         for task in tasks:
-            if task is not None and not task.done():
+            if task is None or task is current:
+                continue
+            if not task.done():
                 task.cancel()
+            wait_tasks.append(task)
 
-        await asyncio.gather(*[task for task in tasks if task is not None], return_exceptions=True)
+        if wait_tasks:
+            await asyncio.gather(*wait_tasks, return_exceptions=True)
         self.remove_pid_file()
+        self._remove_stop_file()
 
     async def _probe_loop(self) -> None:
         interval = max(1.0, float(self._config.probe_interval_s))
@@ -101,6 +113,13 @@ class ControlHub:
                 pass
             await asyncio.sleep(interval)
 
+    async def _stop_watcher_loop(self) -> None:
+        while self._running:
+            if self._stop_path.exists():
+                await self.stop()
+                return
+            await asyncio.sleep(0.5)
+
     def write_pid_file(self) -> None:
         payload = {
             "pid": os.getpid(),
@@ -115,6 +134,13 @@ class ControlHub:
         try:
             if self._pid_path.exists():
                 self._pid_path.unlink()
+        except Exception:
+            return
+
+    def _remove_stop_file(self) -> None:
+        try:
+            if self._stop_path.exists():
+                self._stop_path.unlink()
         except Exception:
             return
 
@@ -156,12 +182,21 @@ class ControlHub:
 
     @staticmethod
     def stop_running(project_root: Path) -> bool:
-        info = ControlHub.read_pid_info(project_root)
+        root = project_root.expanduser().resolve()
+        info = ControlHub.read_pid_info(root)
         if not isinstance(info, dict):
             return False
         pid = info.get("pid")
         if not isinstance(pid, int) or pid <= 0:
             return False
+        stop_path = root / ".aura" / "control_hub.stop"
+        stop_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            stop_path.write_text("stop\n", encoding="utf-8")
+        except Exception:
+            pass
+        if os.name == "nt":
+            return True
         try:
             os.kill(pid, signal.SIGTERM)
         except ProcessLookupError:

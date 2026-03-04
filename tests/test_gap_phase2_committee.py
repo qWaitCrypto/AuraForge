@@ -192,3 +192,4 @@ def test_runner_handles_committee_project_request_signal(tmp_path: Path) -> None
     wakes = bus.query(from_agent="committee", signal_type=SignalType.WAKE, include_archive=True, limit=0)
     assert len(wakes) == 1
     assert wakes[0].to_agent == "agent.ui"
+    assert all(not engine.payloads for engine in created.values())

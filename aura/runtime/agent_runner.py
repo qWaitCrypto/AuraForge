@@ -31,7 +31,7 @@ class RunnerConfig:
     max_concurrent_agents: int = 5
     max_signals_per_agent: int = 0
     max_auto_approval_loops: int = 8
-    op_timeout_s: float | None = None
+    op_timeout_s: float | None = 300.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,6 +146,7 @@ class AgentRunner:
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._queues: dict[str, asyncio.Queue[Signal]] = {}
         self._engines: dict[str, Engine] = {}
+        self._inflight_signal_ids: set[str] = set()
 
         self._engine_factory = engine_factory or self._build_engine_for_session
         self._running = False
@@ -202,14 +203,11 @@ class AgentRunner:
         for signal in signals:
             if not self._running:
                 return
-            enqueued = await self._enqueue_signal(signal)
-            if not enqueued:
+            if signal.signal_id in self._inflight_signal_ids:
                 continue
-            try:
-                self._signal_bus.consume(signal.signal_id)
-            except Exception:
-                # If consume fails, the session queue still has the signal. Keep going.
-                pass
+            enqueued = await self._enqueue_signal(signal)
+            if enqueued:
+                self._inflight_signal_ids.add(signal.signal_id)
 
     async def _enqueue_signal(self, signal: Signal) -> bool:
         agent_id = str(signal.to_agent or "").strip()
@@ -313,9 +311,17 @@ class AgentRunner:
                 session.sandbox_id = signal.sandbox_id
                 session.last_active_at = now_ts_ms()
                 self._write_sessions_snapshot()
+                handled_ok = False
+                should_consume = False
 
                 try:
-                    await self._handle_signal(agent_id=agent_id, session=session, engine=engine, signal=signal)
+                    should_consume = await self._handle_signal(
+                        agent_id=agent_id,
+                        session=session,
+                        engine=engine,
+                        signal=signal,
+                    )
+                    handled_ok = True
                 except Exception as exc:
                     self._append_metric(
                         "signal_handle_failed",
@@ -327,6 +333,20 @@ class AgentRunner:
                         },
                     )
                 finally:
+                    if handled_ok and should_consume:
+                        try:
+                            self._signal_bus.consume(signal.signal_id)
+                        except Exception as exc:
+                            self._append_metric(
+                                "signal_consume_failed",
+                                {
+                                    "agent_id": agent_id,
+                                    "session_id": session.session_id,
+                                    "signal_id": signal.signal_id,
+                                    "error": str(exc),
+                                },
+                            )
+                    self._inflight_signal_ids.discard(signal.signal_id)
                     session.signals_processed += 1
                     session.last_active_at = now_ts_ms()
                     session.current_signal_id = None
@@ -359,7 +379,7 @@ class AgentRunner:
                 self._queues.pop(agent_id, None)
             self._write_sessions_snapshot()
 
-    async def _handle_signal(self, *, agent_id: str, session: AgentSession, engine: Engine, signal: Signal) -> None:
+    async def _handle_signal(self, *, agent_id: str, session: AgentSession, engine: Engine, signal: Signal) -> bool:
         if agent_id == COMMITTEE_AGENT_ID:
             try:
                 decision = self._committee.handle_signal(signal)
@@ -386,7 +406,10 @@ class AgentRunner:
                             "decision": decision,
                         },
                     )
+                    return True
 
+        # Update metadata before engine.arun so ContextBuilder can resolve `signal_id`
+        # from the session record for this turn's prompt assembly.
         self._session_store.update_session(
             session.session_id,
             {
@@ -424,27 +447,45 @@ class AgentRunner:
             if not run.pending_tools:
                 break
             decisions: list[ToolDecision] = []
+            unresolved_pending: list[str] = []
             for pending in run.pending_tools:
                 action = policy.decide(pending.tool_name)
                 if action == "approve":
                     decisions.append(ToolDecision(tool_call_id=pending.tool_call_id, decision="approve"))
                     continue
-                note = (
-                    f"Runner automatic policy denied tool '{pending.tool_name}' during "
-                    f"{signal.signal_type.value} phase."
-                )
-                decisions.append(
-                    ToolDecision(
-                        tool_call_id=pending.tool_call_id,
-                        decision="deny",
-                        note=note,
+                if action == "deny":
+                    note = (
+                        f"Runner automatic policy denied tool '{pending.tool_name}' during "
+                        f"{signal.signal_type.value} phase."
                     )
+                    decisions.append(
+                        ToolDecision(
+                            tool_call_id=pending.tool_call_id,
+                            decision="deny",
+                            note=note,
+                        )
+                    )
+                    continue
+                unresolved_pending.append(pending.tool_name)
+
+            if decisions:
+                run = await engine.continue_run(
+                    run_id=run.run_id,
+                    decisions=decisions,
+                    timeout_s=self._config.op_timeout_s,
                 )
-            run = await engine.continue_run(
-                run_id=run.run_id,
-                decisions=decisions,
-                timeout_s=self._config.op_timeout_s,
-            )
+            if unresolved_pending:
+                self._append_metric(
+                    "approval_manual_required",
+                    {
+                        "agent_id": agent_id,
+                        "session_id": session.session_id,
+                        "signal_id": signal.signal_id,
+                        "run_id": run.run_id,
+                        "pending_tools": unresolved_pending,
+                    },
+                )
+                break
             loops += 1
             if loops >= int(self._config.max_auto_approval_loops):
                 self._append_metric(
@@ -470,6 +511,7 @@ class AgentRunner:
                 "error": run.error,
             },
         )
+        return True
 
     async def _reap_finished_sessions(self) -> None:
         for agent_id, task in list(self._tasks.items()):
@@ -478,12 +520,8 @@ class AgentRunner:
                     _ = task.result()
                 except Exception as exc:
                     self._append_metric("agent_task_failed", {"agent_id": agent_id, "error": str(exc)})
+                # Normal cleanup happens in `_agent_loop` finally.
                 self._tasks.pop(agent_id, None)
-                self._engines.pop(agent_id, None)
-                self._sessions.pop(agent_id, None)
-                queue = self._queues.get(agent_id)
-                if queue is not None and queue.empty():
-                    self._queues.pop(agent_id, None)
         self._write_sessions_snapshot()
 
     async def _shutdown_all(self) -> None:
@@ -504,6 +542,7 @@ class AgentRunner:
         self._engines.clear()
         self._sessions.clear()
         self._queues.clear()
+        self._inflight_signal_ids.clear()
         self._write_sessions_snapshot()
 
     def _build_engine_for_session(self, session_id: str) -> Engine:

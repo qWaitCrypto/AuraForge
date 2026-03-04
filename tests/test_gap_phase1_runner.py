@@ -2,16 +2,19 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from pathlib import Path
 
 from aura.cli import EXIT_OK, main
-from aura.runtime.agent_runner import AgentRunner, RunnerApprovalPolicy
-from aura.runtime.engine import RunResult
+from aura.runtime.agent_runner import AgentRunner, RunnerApprovalPolicy, RunnerConfig
+from aura.runtime.control_hub import ControlHub
+from aura.runtime.engine import PendingToolCall, RunResult
 from aura.runtime.engine_agno_async import AgnoAsyncEngine
 from aura.runtime.event_bus import EventBus
 from aura.runtime.llm.config import ModelConfig
 from aura.runtime.models.signal import SignalType
 from aura.runtime.project import RuntimePaths
+from aura.runtime.signal import SignalBus, SignalStore
 from aura.runtime.stores import FileApprovalStore, FileArtifactStore, FileEventLogStore, FileSessionStore
 from aura.runtime.tools.runtime import ToolApprovalMode
 
@@ -41,6 +44,66 @@ class _FakeEngine:
     async def continue_run(self, *, run_id, decisions, timeout_s=None, cancel=None):  # noqa: ANN001
         del run_id, decisions, timeout_s, cancel
         raise AssertionError("continue_run should not be called for completed fake runs")
+
+
+class _NeedsApprovalEngine(_FakeEngine):
+    def __init__(self, session_id: str, *, pending_tool_name: str) -> None:
+        super().__init__(session_id)
+        self.pending_tool_name = pending_tool_name
+        self.continue_calls: int = 0
+
+    async def arun(self, op, *, timeout_s=None, cancel=None):  # noqa: ANN001
+        del op, timeout_s, cancel
+        return RunResult(
+            status="needs_approval",
+            run_id="run_approval",
+            session_id=self.session_id,
+            approval_id="apr_1",
+            pending_tools=[
+                PendingToolCall(
+                    tool_call_id="tc_1",
+                    tool_name=self.pending_tool_name,
+                    args={"path": "README.md"},
+                )
+            ],
+        )
+
+    async def continue_run(self, *, run_id, decisions, timeout_s=None, cancel=None):  # noqa: ANN001
+        del run_id, timeout_s, cancel
+        self.continue_calls += 1
+        if decisions and decisions[0].decision == "deny":
+            return RunResult(status="completed", run_id="run_approval", session_id=self.session_id)
+        return RunResult(
+            status="needs_approval",
+            run_id="run_approval",
+            session_id=self.session_id,
+            approval_id="apr_1",
+            pending_tools=[
+                PendingToolCall(
+                    tool_call_id="tc_1",
+                    tool_name=self.pending_tool_name,
+                    args={"path": "README.md"},
+                )
+            ],
+        )
+
+
+class _FailingEngine(_FakeEngine):
+    async def arun(self, op, *, timeout_s=None, cancel=None):  # noqa: ANN001
+        del op, timeout_s, cancel
+        raise RuntimeError("simulated engine failure")
+
+
+class _SlowEngine(_FakeEngine):
+    def __init__(self, session_id: str) -> None:
+        super().__init__(session_id)
+        self.calls = 0
+
+    async def arun(self, op, *, timeout_s=None, cancel=None):  # noqa: ANN001
+        del timeout_s, cancel
+        self.calls += 1
+        await asyncio.sleep(0.25)
+        return await super().arun(op, timeout_s=None, cancel=None)
 
 
 def _build_engine(project_root: Path, *, session_meta: dict | None = None) -> tuple[AgnoAsyncEngine, str]:
@@ -135,6 +198,131 @@ def test_agent_runner_consumes_signal_and_handles_once(tmp_path: Path) -> None:
     assert metrics_path.exists()
     metric_lines = [json.loads(line) for line in metrics_path.read_text(encoding="utf-8").splitlines() if line.strip()]
     assert any(item.get("event") == "signal_handled" for item in metric_lines)
+
+
+def test_runner_unknown_pending_tool_keeps_needs_approval(tmp_path: Path) -> None:
+    bus = SignalBus(store=SignalStore(project_root=tmp_path))
+    created: dict[str, _NeedsApprovalEngine] = {}
+
+    def _factory(session_id: str):
+        engine = _NeedsApprovalEngine(session_id, pending_tool_name="project__read_text")
+        created[session_id] = engine
+        return engine
+
+    runner = AgentRunner(project_root=tmp_path, signal_bus=bus, engine_factory=_factory)
+    bus.send(
+        from_agent="tester",
+        to_agent="python-pro",
+        signal_type=SignalType.WAKE,
+        brief="approval needed",
+        issue_key="PROJ-P4",
+    )
+
+    async def _run_once() -> None:
+        task = asyncio.create_task(runner.start())
+        await asyncio.sleep(0.4)
+        await runner.stop()
+        await task
+
+    asyncio.run(_run_once())
+
+    assert created
+    assert all(engine.continue_calls == 0 for engine in created.values())
+    all_signals = bus.query(include_consumed=True, include_archive=True, limit=0)
+    hit = [item for item in all_signals if item.issue_key == "PROJ-P4"]
+    assert hit and hit[0].consumed is True
+
+    metrics_path = tmp_path / ".aura" / "state" / "runner" / "metrics.jsonl"
+    metric_lines = [json.loads(line) for line in metrics_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert any(item.get("event") == "approval_manual_required" for item in metric_lines)
+
+
+def test_runner_failed_handle_does_not_consume_signal(tmp_path: Path) -> None:
+    bus = SignalBus(store=SignalStore(project_root=tmp_path))
+
+    def _factory(session_id: str):
+        return _FailingEngine(session_id)
+
+    runner = AgentRunner(project_root=tmp_path, signal_bus=bus, engine_factory=_factory)
+    sent = bus.send(
+        from_agent="tester",
+        to_agent="python-pro",
+        signal_type=SignalType.WAKE,
+        brief="will fail",
+        issue_key="PROJ-P5",
+    )
+
+    async def _run_once() -> None:
+        task = asyncio.create_task(runner.start())
+        await asyncio.sleep(0.35)
+        await runner.stop()
+        await task
+
+    asyncio.run(_run_once())
+
+    all_signals = bus.query(include_consumed=True, include_archive=True, limit=0)
+    hit = [item for item in all_signals if item.signal_id == sent.signal_id]
+    assert hit and hit[0].consumed is False
+
+
+def test_runner_config_default_timeout_guard() -> None:
+    cfg = RunnerConfig()
+    assert cfg.op_timeout_s == 300.0
+
+
+def test_runner_inflight_dedup_avoids_duplicate_enqueue(tmp_path: Path) -> None:
+    bus = SignalBus(store=SignalStore(project_root=tmp_path))
+    created: dict[str, _SlowEngine] = {}
+
+    def _factory(session_id: str):
+        engine = _SlowEngine(session_id)
+        created[session_id] = engine
+        return engine
+
+    runner = AgentRunner(
+        project_root=tmp_path,
+        signal_bus=bus,
+        engine_factory=_factory,
+        config=RunnerConfig(poll_interval_s=0.05, idle_timeout_s=0.6),
+    )
+    bus.send(
+        from_agent="tester",
+        to_agent="python-pro",
+        signal_type=SignalType.WAKE,
+        brief="dedup check",
+        issue_key="PROJ-P6",
+    )
+
+    async def _run_once() -> None:
+        task = asyncio.create_task(runner.start())
+        await asyncio.sleep(0.55)
+        await runner.stop()
+        await task
+
+    asyncio.run(_run_once())
+
+    assert created
+    assert sum(engine.calls for engine in created.values()) == 1
+
+
+def test_control_hub_stop_running_writes_stop_file(tmp_path: Path, monkeypatch) -> None:
+    pid_path = tmp_path / ".aura" / "control_hub.pid"
+    pid_path.parent.mkdir(parents=True, exist_ok=True)
+    pid_path.write_text('{"pid": 4242, "started_at": 1, "project_root": "x"}\n', encoding="utf-8")
+
+    called: dict[str, int] = {}
+
+    def _fake_kill(pid: int, sig: int) -> None:
+        called["pid"] = pid
+        called["sig"] = int(sig)
+
+    monkeypatch.setattr(os, "kill", _fake_kill)
+
+    ok = ControlHub.stop_running(tmp_path)
+    assert ok is True
+    assert (tmp_path / ".aura" / "control_hub.stop").exists()
+    if os.name != "nt":
+        assert called.get("pid") == 4242
 
 
 def test_phase1_cli_runner_and_daemon_status(tmp_path: Path, monkeypatch, capsys) -> None:
