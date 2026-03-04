@@ -416,7 +416,7 @@ class AgentRunner:
     async def _handle_signal(self, *, agent_id: str, session: AgentSession, engine: Engine, signal: Signal) -> bool:
         if agent_id == COMMITTEE_AGENT_ID:
             try:
-                decision = self._committee.handle_signal(signal)
+                decision = await self._committee.ahandle_signal(signal)
             except Exception as exc:
                 self._append_metric(
                     "committee_signal_failed",
