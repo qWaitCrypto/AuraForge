@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import importlib.resources
 import json
-import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +10,7 @@ from ..models.context import AgentContext
 from ..models.sandbox import Sandbox
 from ..models.signal import Signal, SignalType
 from ..registry import SpecResolver
+from ..workspace_binding import infer_publish_repo_from_git_origin, load_workspace_binding, normalize_repo_ref
 
 
 class ContextBuilder:
@@ -23,6 +23,8 @@ class ContextBuilder:
         self._resolver = spec_resolver
         self._agent_card_max_chars = 2000
         self._project_knowledge_max_chars = 4000
+        self._workspace_binding = load_workspace_binding(project_root=self._project_root)
+        self._origin_publish_repo = infer_publish_repo_from_git_origin(project_root=self._project_root)
 
     def build(
         self,
@@ -30,6 +32,7 @@ class ContextBuilder:
         surface: AgentCapabilitySurface,
         sandbox: Sandbox | None = None,
         signal: Signal | None = None,
+        session_metadata: dict[str, Any] | None = None,
         task_description: str | None = None,
         extra_context: str | None = None,
     ) -> AgentContext:
@@ -40,6 +43,7 @@ class ContextBuilder:
         layers["task_brief"] = self._build_task_brief_layer(
             sandbox=sandbox,
             signal=signal,
+            session_metadata=session_metadata,
             task_description=task_description,
             extra_context=extra_context,
         )
@@ -135,6 +139,7 @@ class ContextBuilder:
         *,
         sandbox: Sandbox | None,
         signal: Signal | None,
+        session_metadata: dict[str, Any] | None,
         task_description: str | None,
         extra_context: str | None,
     ) -> str:
@@ -152,6 +157,11 @@ class ContextBuilder:
         worktree_path = sandbox.worktree_path if sandbox is not None else ""
         branch = sandbox.branch if sandbox is not None else ""
         brief = signal.brief if signal is not None else ""
+        workspace_ctx = self._resolve_workspace_context(signal=signal, session_metadata=session_metadata)
+        publish_repo = workspace_ctx["publish_repo"]
+        default_base_branch = workspace_ctx["default_base_branch"]
+        protected_branches = workspace_ctx["protected_branches"]
+        protected_branches_text = ", ".join(protected_branches)
 
         payload = signal.payload if (signal is not None and isinstance(signal.payload, dict)) else {}
         payload_type = str(payload.get("type") or "").strip().lower()
@@ -194,7 +204,9 @@ class ContextBuilder:
                     "references": ", ".join(
                         [str(item).strip() for item in payload.get("references", []) if str(item).strip()]
                     ),
-                    "workspace_repo": self._workspace_repo_hint(),
+                    "publish_repo": publish_repo,
+                    "default_base_branch": default_base_branch,
+                    "protected_branches": protected_branches_text,
                 },
             )
         elif is_committee_bid_check:
@@ -204,6 +216,9 @@ class ContextBuilder:
                     "issue_key": str(payload.get("issue_key") or issue_key).strip(),
                     "bids_json": json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
                     "signal_payload": json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
+                    "publish_repo": publish_repo,
+                    "default_base_branch": default_base_branch,
+                    "protected_branches": protected_branches_text,
                 },
             )
         elif is_committee_verify:
@@ -220,6 +235,9 @@ class ContextBuilder:
                     "audit_summary": str(payload.get("audit_summary") or payload.get("audit_evidence") or "").strip(),
                     "snapshot_summary": str(payload.get("snapshot_summary") or payload.get("snapshot_diff") or "").strip(),
                     "signal_payload": json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
+                    "publish_repo": publish_repo,
+                    "default_base_branch": default_base_branch,
+                    "protected_branches": protected_branches_text,
                 },
             )
         elif is_committee_task:
@@ -229,6 +247,9 @@ class ContextBuilder:
                     "issue_key": issue_key,
                     "brief": brief,
                     "your_agent_id": str(signal.to_agent or "unknown_agent") if signal is not None else "unknown_agent",
+                    "publish_repo": publish_repo,
+                    "default_base_branch": default_base_branch,
+                    "protected_branches": protected_branches_text,
                 },
             )
 
@@ -238,6 +259,9 @@ class ContextBuilder:
                 {
                     "issue_key": issue_key,
                     "brief": brief,
+                    "publish_repo": publish_repo,
+                    "default_base_branch": default_base_branch,
+                    "protected_branches": protected_branches_text,
                 },
             )
         elif trigger == "task_assigned":
@@ -249,6 +273,9 @@ class ContextBuilder:
                     "worktree_path": worktree_path,
                     "branch": branch,
                     "brief": brief,
+                    "publish_repo": publish_repo,
+                    "default_base_branch": default_base_branch,
+                    "protected_branches": protected_branches_text,
                 },
             )
         elif trigger == "poll":
@@ -257,6 +284,9 @@ class ContextBuilder:
                 {
                     "issue_key": issue_key,
                     "brief": brief,
+                    "publish_repo": publish_repo,
+                    "default_base_branch": default_base_branch,
+                    "protected_branches": protected_branches_text,
                 },
             )
         else:
@@ -267,6 +297,16 @@ class ContextBuilder:
             extra_lines.extend(["", "Task Description:", task_description.strip()])
         if isinstance(extra_context, str) and extra_context.strip():
             extra_lines.extend(["", "Extra Context:", extra_context.strip()])
+        extra_lines.extend(
+            [
+                "",
+                "## Workspace",
+                f"- Publish repo: {publish_repo}",
+                f"- Base branch: {default_base_branch}",
+            ]
+        )
+        if protected_branches_text:
+            extra_lines.append(f"- Protected branches: {protected_branches_text}")
 
         if extra_lines:
             base = base.rstrip() + "\n" + "\n".join(extra_lines).rstrip()
@@ -371,21 +411,55 @@ class ContextBuilder:
             return text[:max_chars]
         return text
 
-    def _workspace_repo_hint(self) -> str:
-        try:
-            proc = subprocess.run(
-                ["git", "remote", "get-url", "origin"],
-                cwd=self._project_root,
-                text=True,
-                capture_output=True,
-                timeout=2,
-            )
-        except Exception:
-            return "unknown"
-        if proc.returncode != 0:
-            return "unknown"
-        text = str(proc.stdout or "").strip()
-        return text or "unknown"
+    def _resolve_workspace_context(
+        self,
+        *,
+        signal: Signal | None,
+        session_metadata: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        payload = signal.payload if (signal is not None and isinstance(signal.payload, dict)) else {}
+        meta = session_metadata if isinstance(session_metadata, dict) else {}
+
+        publish_repo = normalize_repo_ref(meta.get("publish_repo"))
+        if not publish_repo:
+            for key in ("publish_repo", "github_repo", "repo", "repository"):
+                publish_repo = normalize_repo_ref(payload.get(key))
+                if publish_repo:
+                    break
+        if not publish_repo:
+            publish_repo = self._workspace_binding.publish_repo or self._origin_publish_repo or "unknown"
+
+        default_base_branch = str(meta.get("default_base_branch") or "").strip()
+        if not default_base_branch:
+            default_base_branch = str(payload.get("default_base_branch") or payload.get("base_branch") or "").strip()
+        if not default_base_branch:
+            default_base_branch = str(self._workspace_binding.default_base_branch or "").strip() or "main"
+
+        protected_raw = meta.get("protected_branches")
+        protected: list[str] = []
+        seen: set[str] = set()
+        if isinstance(protected_raw, list):
+            for item in protected_raw:
+                branch = str(item or "").strip()
+                if not branch or branch in seen:
+                    continue
+                seen.add(branch)
+                protected.append(branch)
+        if not protected and isinstance(payload.get("protected_branches"), list):
+            for item in payload.get("protected_branches", []):
+                branch = str(item or "").strip()
+                if not branch or branch in seen:
+                    continue
+                seen.add(branch)
+                protected.append(branch)
+        if not protected:
+            protected = list(self._workspace_binding.protected_branches or ())
+
+        return {
+            "publish_repo": publish_repo,
+            "default_base_branch": default_base_branch,
+            "protected_branches": protected,
+        }
 
     @staticmethod
     def _infer_trigger(signal: Signal | None) -> str:

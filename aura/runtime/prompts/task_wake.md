@@ -2,6 +2,9 @@ Wake signal received.
 
 Issue: {issue_key}
 Brief: {brief}
+Publish repo: {publish_repo}
+Default base branch: {default_base_branch}
+Protected branches: {protected_branches}
 
 Action:
 1. Read the issue and related context.

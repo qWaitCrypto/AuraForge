@@ -4,6 +4,8 @@ import asyncio
 import fnmatch
 import json
 import os
+import shlex
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -21,6 +23,13 @@ from .project import RuntimePaths
 from .signal import SignalBus
 from .stores import FileApprovalStore, FileArtifactStore, FileEventLogStore, FileSessionStore
 from .tools.runtime import ToolApprovalMode
+from .workspace_binding import (
+    WorkspaceBinding,
+    infer_publish_repo_from_git_origin,
+    load_workspace_binding,
+    normalize_repo_ref,
+    repo_match_key,
+)
 from .protocol import Op, OpKind
 
 
@@ -29,6 +38,7 @@ class RunnerConfig:
     poll_interval_s: float = 2.0
     idle_timeout_s: float = 300.0
     bid_check_interval_s: float = 120.0
+    workspace_reload_interval_s: float = 300.0
     max_concurrent_agents: int = 5
     max_signals_per_agent: int = 0
     max_auto_approval_loops: int = 8
@@ -142,6 +152,8 @@ class AgentRunner:
             signal_bus=self._signal_bus,
             coordinator_mode="thin_router",
         )
+        self._workspace_binding: WorkspaceBinding = load_workspace_binding(project_root=self._project_root)
+        self._origin_publish_repo: str | None = infer_publish_repo_from_git_origin(project_root=self._project_root)
 
         self._state_dir = self._paths.state_dir / "runner"
         self._state_dir.mkdir(parents=True, exist_ok=True)
@@ -157,14 +169,18 @@ class AgentRunner:
         self._engine_factory = engine_factory or self._build_engine_for_session
         self._running = False
         self._next_bid_check_ts_ms = 0
+        self._next_workspace_reload_ts_ms = 0
 
     async def start(self) -> None:
         self._running = True
         self._next_bid_check_ts_ms = 0
+        self._next_workspace_reload_ts_ms = 0
+        self._reload_workspace_binding_if_due(force=True)
         self._append_metric("runner_started", {"pid": os.getpid()})
         self._write_sessions_snapshot()
         try:
             while self._running:
+                self._reload_workspace_binding_if_due()
                 await self._poll_and_dispatch()
                 self._emit_periodic_bid_check()
                 await self._reap_finished_sessions()
@@ -220,6 +236,8 @@ class AgentRunner:
                 "type": "bid_check",
                 "auto_evaluate": True,
                 "fetch_linear_comments": True,
+                "publish_repo": self._workspace_binding.publish_repo or self._origin_publish_repo,
+                "default_base_branch": self._workspace_binding.default_base_branch,
             },
         )
         self._append_metric(
@@ -227,6 +245,48 @@ class AgentRunner:
             {
                 "signal_id": signal.signal_id,
                 "interval_s": interval,
+            },
+        )
+
+    def _reload_workspace_binding_if_due(self, *, force: bool = False) -> None:
+        interval_s = float(self._config.workspace_reload_interval_s)
+        now = now_ts_ms()
+        if not force:
+            if interval_s <= 0:
+                return
+            if self._next_workspace_reload_ts_ms <= 0:
+                self._next_workspace_reload_ts_ms = now + int(max(1.0, interval_s) * 1000)
+                return
+            if now < self._next_workspace_reload_ts_ms:
+                return
+        if interval_s > 0:
+            self._next_workspace_reload_ts_ms = now + int(max(1.0, interval_s) * 1000)
+        else:
+            self._next_workspace_reload_ts_ms = 0
+
+        previous_binding = self._workspace_binding
+        previous_origin = self._origin_publish_repo
+        try:
+            loaded = load_workspace_binding(project_root=self._project_root)
+            origin = infer_publish_repo_from_git_origin(project_root=self._project_root)
+        except Exception as exc:
+            self._append_metric("workspace_binding_reload_failed", {"error": str(exc)})
+            return
+
+        if loaded == previous_binding and origin == previous_origin:
+            return
+        self._workspace_binding = loaded
+        self._origin_publish_repo = origin
+        self._append_metric(
+            "workspace_binding_reloaded",
+            {
+                "source": loaded.source,
+                "publish_repo_before": previous_binding.publish_repo,
+                "publish_repo_after": loaded.publish_repo,
+                "base_branch_before": previous_binding.default_base_branch,
+                "base_branch_after": loaded.default_base_branch,
+                "origin_repo_before": previous_origin,
+                "origin_repo_after": origin,
             },
         )
 
@@ -281,6 +341,7 @@ class AgentRunner:
             return False
 
         role = "integrator" if agent_id == "committee" else "worker"
+        default_publish_repo = self._workspace_binding.publish_repo or self._origin_publish_repo
         session_id = self._session_store.create_session(
             {
                 "project_ref": str(self._project_root),
@@ -289,6 +350,9 @@ class AgentRunner:
                 "role": role,
                 "tool_approval_mode": ToolApprovalMode.STANDARD.value,
                 "llm_streaming": True,
+                "publish_repo": default_publish_repo,
+                "default_base_branch": self._workspace_binding.default_base_branch,
+                "protected_branches": list(self._workspace_binding.protected_branches or ()),
             }
         )
 
@@ -419,6 +483,16 @@ class AgentRunner:
             self._write_sessions_snapshot()
 
     async def _handle_signal(self, *, agent_id: str, session: AgentSession, engine: Engine, signal: Signal) -> bool:
+        publish_repo = self._resolve_publish_repo(signal)
+        default_base_branch = self._resolve_default_base_branch(signal)
+        protected_branches = self._resolve_protected_branches(signal)
+        signal = self._with_workspace_payload(
+            signal,
+            publish_repo=publish_repo,
+            default_base_branch=default_base_branch,
+            protected_branches=protected_branches,
+        )
+
         if agent_id == COMMITTEE_AGENT_ID:
             try:
                 decision = self._committee.prepare_context(
@@ -461,6 +535,9 @@ class AgentRunner:
                 "signal_payload": dict(signal.payload or {}),
                 "issue_key": signal.issue_key,
                 "sandbox_id": signal.sandbox_id,
+                "publish_repo": publish_repo,
+                "default_base_branch": default_base_branch,
+                "protected_branches": list(protected_branches),
             },
         )
 
@@ -489,6 +566,34 @@ class AgentRunner:
             decisions: list[ToolDecision] = []
             unresolved_pending: list[str] = []
             for pending in run.pending_tools:
+                guardrail_note = self._repo_guardrail_deny_note(
+                    tool_name=pending.tool_name,
+                    tool_args=pending.args,
+                    publish_repo=publish_repo,
+                )
+                if isinstance(guardrail_note, str) and guardrail_note.strip():
+                    decisions.append(
+                        ToolDecision(
+                            tool_call_id=pending.tool_call_id,
+                            decision="deny",
+                            note=guardrail_note.strip(),
+                        )
+                    )
+                    self._append_metric(
+                        "repo_guardrail_deny",
+                        {
+                            "agent_id": agent_id,
+                            "session_id": session.session_id,
+                            "signal_id": signal.signal_id,
+                            "run_id": run.run_id,
+                            "tool_name": pending.tool_name,
+                            "tool_call_id": pending.tool_call_id,
+                            "publish_repo": publish_repo,
+                            "reason": guardrail_note.strip(),
+                        },
+                    )
+                    continue
+
                 action = policy.decide(pending.tool_name)
                 if action == "approve":
                     decisions.append(ToolDecision(tool_call_id=pending.tool_call_id, decision="approve"))
@@ -661,6 +766,191 @@ class AgentRunner:
         if signal.signal_type is SignalType.TASK_ASSIGNED:
             return RunnerApprovalPolicy.for_task_assigned()
         return RunnerApprovalPolicy.for_notify()
+
+    def _resolve_publish_repo(self, signal: Signal) -> str | None:
+        payload = signal.payload if isinstance(signal.payload, dict) else {}
+        payload_repo = self._extract_publish_repo_from_payload(payload)
+        if payload_repo:
+            return payload_repo
+        if self._workspace_binding.publish_repo:
+            return self._workspace_binding.publish_repo
+        return self._origin_publish_repo
+
+    def _resolve_default_base_branch(self, signal: Signal) -> str:
+        payload = signal.payload if isinstance(signal.payload, dict) else {}
+        for key in ("default_base_branch", "base_branch"):
+            value = str(payload.get(key) or "").strip()
+            if value:
+                return value
+        value = str(self._workspace_binding.default_base_branch or "").strip()
+        return value or "main"
+
+    def _resolve_protected_branches(self, signal: Signal) -> tuple[str, ...]:
+        payload = signal.payload if isinstance(signal.payload, dict) else {}
+        raw = payload.get("protected_branches")
+        if isinstance(raw, list):
+            out: list[str] = []
+            seen: set[str] = set()
+            for item in raw:
+                branch = str(item or "").strip()
+                if not branch or branch in seen:
+                    continue
+                seen.add(branch)
+                out.append(branch)
+            if out:
+                return tuple(out)
+        return tuple(self._workspace_binding.protected_branches or ())
+
+    @staticmethod
+    def _extract_publish_repo_from_payload(payload: dict[str, Any]) -> str | None:
+        for key in ("publish_repo", "github_repo", "repo", "repository"):
+            repo = normalize_repo_ref(payload.get(key))
+            if repo:
+                return repo
+        owner = str(payload.get("owner") or "").strip()
+        repo_name = str(payload.get("repo_name") or payload.get("name") or "").strip()
+        if owner and repo_name and "/" not in repo_name:
+            return normalize_repo_ref(f"{owner}/{repo_name}")
+        return None
+
+    def _with_workspace_payload(
+        self,
+        signal: Signal,
+        *,
+        publish_repo: str | None,
+        default_base_branch: str,
+        protected_branches: tuple[str, ...],
+    ) -> Signal:
+        payload = signal.payload if isinstance(signal.payload, dict) else {}
+        updated = dict(payload)
+        changed = False
+
+        if publish_repo and not self._extract_publish_repo_from_payload(updated):
+            updated["publish_repo"] = publish_repo
+            changed = True
+        if default_base_branch and not str(updated.get("default_base_branch") or "").strip():
+            updated["default_base_branch"] = default_base_branch
+            changed = True
+        if protected_branches and not isinstance(updated.get("protected_branches"), list):
+            updated["protected_branches"] = list(protected_branches)
+            changed = True
+
+        if not changed:
+            return signal
+        return signal.model_copy(update={"payload": updated})
+
+    def _repo_guardrail_deny_note(
+        self,
+        *,
+        tool_name: str,
+        tool_args: dict[str, Any] | None,
+        publish_repo: str | None,
+    ) -> str | None:
+        expected_key = repo_match_key(publish_repo)
+        if not expected_key:
+            return None
+
+        name = str(tool_name or "").strip().lower()
+        args = tool_args if isinstance(tool_args, dict) else {}
+
+        if "github" in name and ("create_pull_request" in name or "create_pr" in name or "push_files" in name):
+            target = self._extract_target_repo_from_tool_args(args)
+            target_key = repo_match_key(target)
+            if target_key and target_key != expected_key:
+                return (
+                    "Runner repo guardrail denied GitHub action because target repo "
+                    f"'{target}' does not match bound publish_repo '{publish_repo}'."
+                )
+            return None
+
+        if name == "shell__run":
+            command = str(args.get("command") or args.get("cmd") or "").strip()
+            if not command or "git push" not in command:
+                return None
+            target = self._extract_git_push_target_repo(command=command, args=args)
+            target_key = repo_match_key(target)
+            if target_key and target_key != expected_key:
+                return (
+                    "Runner repo guardrail denied git push because target repo "
+                    f"'{target}' does not match bound publish_repo '{publish_repo}'."
+                )
+        return None
+
+    def _extract_target_repo_from_tool_args(self, args: dict[str, Any]) -> str | None:
+        for key in ("publish_repo", "repo", "repository", "nameWithOwner", "repoWithOwner", "full_name"):
+            repo = normalize_repo_ref(args.get(key))
+            if repo:
+                return repo
+
+        owner = str(args.get("owner") or "").strip()
+        repo_name = str(args.get("name") or args.get("repo_name") or "").strip()
+        if owner and repo_name and "/" not in repo_name:
+            repo = normalize_repo_ref(f"{owner}/{repo_name}")
+            if repo:
+                return repo
+
+        repository_obj = args.get("repository")
+        if isinstance(repository_obj, dict):
+            owner = str(repository_obj.get("owner") or "").strip()
+            repo_name = str(repository_obj.get("name") or repository_obj.get("repo") or "").strip()
+            if owner and repo_name and "/" not in repo_name:
+                repo = normalize_repo_ref(f"{owner}/{repo_name}")
+                if repo:
+                    return repo
+            for key in ("full_name", "nameWithOwner", "repo"):
+                repo = normalize_repo_ref(repository_obj.get(key))
+                if repo:
+                    return repo
+        return None
+
+    def _extract_git_push_target_repo(self, *, command: str, args: dict[str, Any]) -> str | None:
+        try:
+            tokens = shlex.split(command)
+        except Exception:
+            tokens = str(command or "").split()
+        if len(tokens) < 3:
+            return None
+        if tokens[0] != "git" or tokens[1] != "push":
+            return None
+
+        cwd = str(args.get("cwd") or "").strip() or None
+        for token in tokens[2:]:
+            if token.startswith("-"):
+                continue
+            repo = normalize_repo_ref(token)
+            if repo:
+                return repo
+            if token == "origin":
+                return self._origin_publish_repo
+            remote_repo = self._repo_for_remote_name(token, cwd=cwd)
+            if remote_repo:
+                return remote_repo
+            break
+        return None
+
+    def _repo_for_remote_name(self, remote_name: str, *, cwd: str | None) -> str | None:
+        name = str(remote_name or "").strip()
+        if not name:
+            return None
+        workdir = self._project_root
+        if isinstance(cwd, str) and cwd.strip():
+            raw = Path(cwd.strip())
+            candidate = (raw if raw.is_absolute() else (self._project_root / raw)).resolve()
+            if candidate.exists() and candidate.is_dir():
+                workdir = candidate
+        try:
+            proc = subprocess.run(
+                ["git", "remote", "get-url", name],
+                cwd=workdir,
+                text=True,
+                capture_output=True,
+                timeout=2,
+            )
+        except Exception:
+            return None
+        if proc.returncode != 0:
+            return None
+        return normalize_repo_ref(proc.stdout)
 
     def _write_sessions_snapshot(self) -> None:
         payload = self.sessions_snapshot()

@@ -4,6 +4,9 @@ You are AuraForge Committee validating completed work.
 - Issue key: {issue_key}
 - Worker: {agent_id}
 - Sandbox: {sandbox_id}
+- Publish repo: {publish_repo}
+- Default base branch: {default_base_branch}
+- Protected branches: {protected_branches}
 - Acceptance criteria: {acceptance_criteria}
 - Audit evidence summary: {audit_summary}
 - Snapshot diff summary: {snapshot_summary}

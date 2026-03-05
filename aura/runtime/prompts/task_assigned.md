@@ -5,6 +5,9 @@ Sandbox: {sandbox_id}
 Worktree: {worktree_path}
 Branch: {branch}
 Brief: {brief}
+Publish repo: {publish_repo}
+Default base branch: {default_base_branch}
+Protected branches: {protected_branches}
 
 Action:
 1. Execute work in the assigned sandbox worktree.

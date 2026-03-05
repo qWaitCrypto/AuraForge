@@ -3002,6 +3002,15 @@ def _cmd_init(args: argparse.Namespace) -> int:
                     '      "cwd": "",',
                     '      "timeout_s": 60',
                     "    },",
+                    '    "github": {',
+                    '      "_comment": "GitHub MCP server. Configure env token and enable for automated PR workflows.",',
+                    '      "enabled": false,',
+                    '      "command": "npx",',
+                    '      "args": ["-y", "@modelcontextprotocol/server-github"],',
+                    '      "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}" },',
+                    '      "cwd": "",',
+                    '      "timeout_s": 60',
+                    "    },",
                     '    "example": {',
                     '      "enabled": false,',
                     '      "command": "",',
@@ -3011,6 +3020,24 @@ def _cmd_init(args: argparse.Namespace) -> int:
                     '      "timeout_s": 60',
                     "    }",
                     "  }",
+                    "}",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+    workspace_path = project_root / ".aura" / "config" / "workspace.json"
+    if not workspace_path.exists():
+        workspace_path.write_text(
+            "\n".join(
+                [
+                    "{",
+                    '  "_comment": "Workspace publish binding shared by Committee and worker agents.",',
+                    '  "publish_repo": "",',
+                    '  "default_base_branch": "main",',
+                    '  "protected_branches": ["main", "production"],',
+                    '  "github_token_env": "GITHUB_TOKEN"',
                     "}",
                     "",
                 ]

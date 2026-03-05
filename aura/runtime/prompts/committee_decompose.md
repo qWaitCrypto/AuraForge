@@ -8,7 +8,9 @@ You are an autonomous committee agent. Do not wait for manual orchestration.
 - Constraints: {constraints}
 - Priority: {priority}
 - References: {references}
-- Workspace repo: {workspace_repo}
+- Publish repo: {publish_repo}
+- Default base branch: {default_base_branch}
+- Protected branches: {protected_branches}
 
 Raw payload:
 {project_request}
@@ -26,8 +28,11 @@ Note:
 2. Create milestones only if work is clearly phase-based.
 3. Decompose work into concrete issues (max 6), each with explicit acceptance criteria.
 4. For every issue, discover strong candidates and WAKE them for bidding.
-5. Require bid JSON contract from `task_bid.md` (do not directly assign workers).
-6. Keep all output auditable and specific.
+5. In every outgoing `signal__send` payload, include:
+   - `publish_repo`: `{publish_repo}`
+   - `default_base_branch`: `{default_base_branch}`
+6. Require bid JSON contract from `task_bid.md` (do not directly assign workers).
+7. Keep all output auditable and specific.
 
 ## Guardrails
 - Never skip acceptance criteria.

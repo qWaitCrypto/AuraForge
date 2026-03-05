@@ -2004,6 +2004,7 @@ class AgnoAsyncEngine:
                     surface=capability_surface,
                     sandbox=self._current_sandbox(),
                     signal=self._current_signal(),
+                    session_metadata=self._session_metadata(),
                 )
             except Exception:
                 built_context = None

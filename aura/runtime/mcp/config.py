@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import json
+import os
+import re
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 
 MCP_CONFIG_FILENAME = "mcp.json"
+_ENV_REF_RE = re.compile(r"\$\{([A-Z0-9_]+)\}")
+_GH_TOKEN_UNSET = object()
+_GH_AUTH_TOKEN_CACHE: object = _GH_TOKEN_UNSET
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,8 +86,51 @@ def _as_env_dict(v: Any) -> dict[str, str]:
             continue
         if not isinstance(val, str):
             continue
-        out[k] = val
+        resolved = _expand_env_refs(val)
+        key = str(k or "").strip()
+        if not resolved and key in {"GITHUB_PERSONAL_ACCESS_TOKEN", "GITHUB_TOKEN"}:
+            resolved = str(os.environ.get("GITHUB_TOKEN", "") or "").strip()
+            if not resolved:
+                resolved = str(_gh_auth_token() or "")
+        out[key] = resolved
     return out
+
+
+def _expand_env_refs(value: str) -> str:
+    text = str(value or "")
+    if not text:
+        return text
+
+    def _replace(match: re.Match[str]) -> str:
+        key = str(match.group(1) or "").strip()
+        if not key:
+            return ""
+        return str(os.environ.get(key, ""))
+
+    return _ENV_REF_RE.sub(_replace, text)
+
+
+def _gh_auth_token() -> str | None:
+    global _GH_AUTH_TOKEN_CACHE
+    if _GH_AUTH_TOKEN_CACHE is not _GH_TOKEN_UNSET:
+        cached = str(_GH_AUTH_TOKEN_CACHE or "").strip()
+        return cached or None
+
+    token = ""
+    try:
+        proc = subprocess.run(
+            ["gh", "auth", "token"],
+            text=True,
+            capture_output=True,
+            timeout=2,
+        )
+    except Exception:
+        token = ""
+    else:
+        if proc.returncode == 0:
+            token = str(proc.stdout or "").strip()
+    _GH_AUTH_TOKEN_CACHE = token
+    return token or None
 
 
 def _load_mcp_config_dict(data: Any, *, source: str) -> McpConfig:

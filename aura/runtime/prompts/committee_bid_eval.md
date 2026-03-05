@@ -3,6 +3,9 @@ You are AuraForge Committee evaluating bids.
 ## Inputs
 - Issue key: {issue_key}
 - Issue key hint: {issue_key}
+- Publish repo: {publish_repo}
+- Default base branch: {default_base_branch}
+- Protected branches: {protected_branches}
 - Signal payload:
 {signal_payload}
 - Candidate bids (JSON):
