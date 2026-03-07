@@ -33,6 +33,7 @@ class ControlHub:
             project_root=self._project_root,
             signal_bus=self._control.signal_bus,
             config=self._config.runner,
+            dispatcher=self._control.dispatcher,
         )
 
         self._pid_path = self._project_root / ".aura" / "control_hub.pid"

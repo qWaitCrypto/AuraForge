@@ -131,6 +131,7 @@ class AgentRunner:
         signal_bus: SignalBus,
         config: RunnerConfig | None = None,
         engine_factory: EngineFactory | None = None,
+        dispatcher: Any | None = None,
     ) -> None:
         self._project_root = project_root.expanduser().resolve()
         self._signal_bus = signal_bus
@@ -150,6 +151,7 @@ class AgentRunner:
         self._committee = CommitteeCoordinator(
             project_root=self._project_root,
             signal_bus=self._signal_bus,
+            dispatcher=dispatcher,
             coordinator_mode="thin_router",
         )
         self._workspace_binding: WorkspaceBinding = load_workspace_binding(project_root=self._project_root)
@@ -677,6 +679,7 @@ class AgentRunner:
                     run_status=str(run.status or ""),
                     run_id=str(run.run_id or ""),
                     error=str(run.error or "") or None,
+                    assistant_text=(str(run.assistant_text) if isinstance(run.assistant_text, str) else None),
                 )
             except Exception as exc:
                 self._append_metric(

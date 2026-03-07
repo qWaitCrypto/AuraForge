@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import functools
 import json
 import os
 import re
 import subprocess
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -11,6 +13,7 @@ from typing import Any
 
 MCP_CONFIG_FILENAME = "mcp.json"
 _ENV_REF_RE = re.compile(r"\$\{([A-Z0-9_]+)\}")
+_LOG_SAFE_RE = re.compile(r"[^A-Za-z0-9_.-]+")
 _GH_TOKEN_UNSET = object()
 _GH_AUTH_TOKEN_CACHE: object = _GH_TOKEN_UNSET
 
@@ -108,6 +111,62 @@ def _expand_env_refs(value: str) -> str:
         return str(os.environ.get(key, ""))
 
     return _ENV_REF_RE.sub(_replace, text)
+
+
+def mcp_logs_dir_for_project(project_root: Path) -> Path:
+    return project_root / ".aura" / "logs"
+
+
+def mcp_stderr_log_path(*, project_root: Path, server_name: str) -> Path:
+    cleaned = _LOG_SAFE_RE.sub("_", str(server_name or "").strip()).strip("._")
+    if not cleaned:
+        cleaned = "server"
+    return mcp_logs_dir_for_project(project_root) / f"mcp_{cleaned}.log"
+
+
+@contextmanager
+def mcp_stdio_errlog_context(*, project_root: Path, server_name: str):
+    log_path = mcp_stderr_log_path(project_root=project_root, server_name=server_name)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        import mcp.client.stdio as _mcp_stdio_mod
+    except Exception:
+        yield log_path
+        return
+
+    original = getattr(_mcp_stdio_mod, "stdio_client", None)
+    if original is None:
+        yield log_path
+        return
+
+    @functools.wraps(original)
+    def _logged_stdio_client(*args: Any, **kwargs: Any):
+        if kwargs.get("errlog") is not None:
+            return original(*args, **kwargs)
+
+        handle = open(log_path, "a", encoding="utf-8")
+        kwargs["errlog"] = handle
+        inner = original(*args, **kwargs)
+
+        @asynccontextmanager
+        async def _wrapped():
+            try:
+                async with inner as result:
+                    yield result
+            finally:
+                try:
+                    handle.close()
+                except Exception:
+                    pass
+
+        return _wrapped()
+
+    _mcp_stdio_mod.stdio_client = _logged_stdio_client
+    try:
+        yield log_path
+    finally:
+        _mcp_stdio_mod.stdio_client = original
 
 
 def _gh_auth_token() -> str | None:

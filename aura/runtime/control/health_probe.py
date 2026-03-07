@@ -8,7 +8,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from ..ids import new_id, now_ts_ms
-from ..mcp.config import load_mcp_config
+from ..mcp.config import load_mcp_config, mcp_stdio_errlog_context
 from ..signal import SignalBus
 from .agent_status import AgentState, AgentStatusTracker
 from .policy import PolicyGate
@@ -305,8 +305,9 @@ class HealthProbe:
                 timeout_seconds=5,
                 tool_name_prefix=f"mcp__{server}__",
             )
-            async with toolkit as entered:
-                _ = entered.get_async_functions()
+            with mcp_stdio_errlog_context(project_root=self._project_root, server_name=server):
+                async with toolkit as entered:
+                    _ = entered.get_async_functions()
 
         try:
             asyncio.run(asyncio.wait_for(_probe_once(), timeout=5.0))

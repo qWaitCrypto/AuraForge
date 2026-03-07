@@ -264,7 +264,44 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     init_parser.set_defaults(func=_cmd_init)
 
-    chat_parser = subparsers.add_parser("chat", help="Start an interactive session.")
+    submit_parser = subparsers.add_parser("submit", help="Submit a project request to Committee.")
+    submit_parser.add_argument("goal_text", nargs="?", help="Goal description.")
+    submit_parser.add_argument("--goal", dest="goal", default=None, help="Goal description.")
+    submit_parser.add_argument("--context", dest="context", default="", help="Detailed task context.")
+    submit_parser.add_argument(
+        "--constraints",
+        dest="constraints",
+        nargs="*",
+        default=None,
+        help="Optional constraints list.",
+    )
+    submit_parser.add_argument(
+        "--priority",
+        dest="priority",
+        choices=["high", "medium", "low"],
+        default="medium",
+        help="Submission priority.",
+    )
+    submit_parser.set_defaults(func=_cmd_submit)
+
+    watch_parser = subparsers.add_parser("watch", help="Watch market activity.")
+    watch_parser.add_argument(
+        "--refresh",
+        dest="refresh_s",
+        type=float,
+        default=2.0,
+        help="Refresh interval in seconds (TTY mode only).",
+    )
+    watch_parser.set_defaults(func=_cmd_watch)
+
+    chat_parser = subparsers.add_parser(
+        "chat",
+        help="Lightweight Q&A and small edits.",
+        description=(
+            "Lightweight Q&A and small edits. "
+            "Use `aura submit` for project requests and `aura watch` to follow daemon progress."
+        ),
+    )
     chat_parser.add_argument(
         "--session",
         dest="session_id",
@@ -1404,7 +1441,7 @@ def _run_chat_console_ui(
                     UIEventKind.LOG,
                     {
                         "level": "help",
-                        "message": "Enter=send; Ctrl+J=newline; Ctrl+C=cancel; /clear clears; /perm sets tool approval mode; /model selects chat model; /stream toggles LLM streaming; /compact summarizes and prunes history; /exit quits.",
+                        "message": "Chat mode is for lightweight Q&A and small edits. Use `aura submit` for project work and `aura watch` for daemon progress. Enter=send; Ctrl+J=newline; Ctrl+C=cancel; /clear clears; /perm sets tool approval mode; /model selects chat model; /stream toggles LLM streaming; /compact summarizes and prunes history; /exit quits.",
                     },
                 )
             )
@@ -1768,6 +1805,200 @@ def _load_control_plane():
     except Exception as e:
         return None, str(e), EXIT_ERROR
     return control, None, EXIT_OK
+
+
+def _format_watch_age(ts_ms: int | None, *, now_ms: int) -> str:
+    if not isinstance(ts_ms, int) or ts_ms <= 0:
+        return "-"
+    delta_s = max(0, int((now_ms - ts_ms) / 1000))
+    if delta_s < 60:
+        return f"{delta_s}s ago"
+    if delta_s < 3600:
+        return f"{delta_s // 60}m ago"
+    return f"{delta_s // 3600}h ago"
+
+
+def _render_watch_snapshot(*, daemon_payload: dict[str, object], snapshot, recent_signals: list[object]) -> str:
+    now_ms = int(getattr(snapshot, "ts_ms", now_ts_ms()) or now_ts_ms())
+    running = bool(daemon_payload.get("running"))
+    pid = daemon_payload.get("pid")
+    summary = snapshot.summary
+
+    lines: list[str] = []
+    lines.append("=== AuraForge ===")
+    daemon_state = "running" if running else "stopped"
+    daemon_line = f"Daemon: {daemon_state}"
+    if isinstance(pid, int) and pid > 0:
+        daemon_line += f" (pid {pid})"
+    lines.append(daemon_line)
+    lines.append(
+        "Signals: "
+        f"{summary.total_signals_today} today / "
+        f"{summary.total_sandboxes} sandboxes / "
+        f"{summary.dead_letter_count} dead letters"
+    )
+    lines.append(
+        "Agents: "
+        f"{summary.active_agents} active / {summary.total_agents} known"
+    )
+    lines.append("")
+
+    lines.append("Issues:")
+    if snapshot.issues:
+        for issue in snapshot.issues[:10]:
+            actors = ", ".join(issue.agents[:3]) if issue.agents else "-"
+            lines.append(
+                f"  {issue.issue_key:<16} "
+                f"signals={issue.signal_count:<3} "
+                f"sandboxes={issue.sandbox_count:<2} "
+                f"agents={actors}"
+            )
+    else:
+        lines.append("  (none)")
+    lines.append("")
+
+    lines.append("Agents:")
+    if snapshot.agents:
+        for agent in snapshot.agents[:12]:
+            issues = ",".join(agent.active_issue_keys[:2]) if agent.active_issue_keys else "-"
+            lines.append(
+                f"  {agent.agent_id:<20} "
+                f"[{agent.state.value.upper():<7}] "
+                f"issues={issues:<18} "
+                f"pending={agent.pending_signal_count}"
+            )
+    else:
+        lines.append("  (none)")
+    lines.append("")
+
+    lines.append("Recent Signals:")
+    if recent_signals:
+        for signal in recent_signals[-8:]:
+            issue_key = str(getattr(signal, "issue_key", "") or "-")
+            signal_type = str(getattr(getattr(signal, "signal_type", None), "value", getattr(signal, "signal_type", "")) or "").upper()
+            from_agent = str(getattr(signal, "from_agent", "") or "-")
+            to_agent = str(getattr(signal, "to_agent", "") or "-")
+            brief = str(getattr(signal, "brief", "") or "").strip()
+            age = _format_watch_age(getattr(signal, "created_at", None), now_ms=now_ms)
+            lines.append(f"  {age:<8} {from_agent} -> {to_agent}  {signal_type:<13} {issue_key}  {brief}")
+    else:
+        lines.append("  (none)")
+
+    return "\n".join(lines) + "\n"
+
+
+def _cmd_watch(args: argparse.Namespace) -> int:
+    from .runtime.control_hub import ControlHub
+    from .runtime.project import RuntimePaths
+
+    try:
+        paths = RuntimePaths.discover()
+    except FileNotFoundError as e:
+        print(str(e), file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+
+    control, error, code = _load_control_plane()
+    if control is None:
+        print(str(error), file=sys.stderr)
+        return code
+
+    refresh_s = max(0.2, float(getattr(args, "refresh_s", 2.0) or 2.0))
+
+    def _emit_once() -> None:
+        daemon_payload = ControlHub.status_snapshot(paths.project_root)
+        snapshot = control.dashboard.snapshot()
+        recent_signals = control.signal_bus.query(include_archive=True, limit=8)
+        sys.stdout.write(_render_watch_snapshot(daemon_payload=daemon_payload, snapshot=snapshot, recent_signals=recent_signals))
+        sys.stdout.flush()
+
+    is_tty = bool(getattr(sys.stdout, "isatty", lambda: False)())
+    if not is_tty:
+        _emit_once()
+        return EXIT_OK
+
+    try:
+        while True:
+            sys.stdout.write("\x1b[2J\x1b[H")
+            _emit_once()
+            time.sleep(refresh_s)
+    except KeyboardInterrupt:
+        return EXIT_OK
+
+
+def _cmd_submit(args: argparse.Namespace) -> int:
+    from .runtime.control_hub import ControlHub
+    from .runtime.models.signal import SignalType
+    from .runtime.project import RuntimePaths
+    from .runtime.workspace_binding import infer_publish_repo_from_git_origin, load_workspace_binding
+
+    try:
+        paths = RuntimePaths.discover()
+    except FileNotFoundError as e:
+        print(str(e), file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+
+    goal_text = str(getattr(args, "goal_text", "") or "").strip()
+    goal_flag = str(getattr(args, "goal", "") or "").strip()
+    if goal_text and goal_flag and goal_text != goal_flag:
+        print("Provide either positional goal or --goal, not both.", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+
+    goal = goal_flag or goal_text
+    if not goal:
+        print("goal is required.", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+
+    context = str(getattr(args, "context", "") or "").strip()
+    priority = str(getattr(args, "priority", "medium") or "medium").strip().lower() or "medium"
+
+    constraints: list[str] = []
+    constraints_raw = getattr(args, "constraints", None)
+    if isinstance(constraints_raw, list):
+        for item in constraints_raw:
+            cleaned = str(item or "").strip()
+            if cleaned:
+                constraints.append(cleaned)
+
+    control, error, code = _load_control_plane()
+    if control is None:
+        print(str(error), file=sys.stderr)
+        return code
+
+    binding = load_workspace_binding(project_root=paths.project_root)
+    publish_repo = binding.publish_repo or infer_publish_repo_from_git_origin(project_root=paths.project_root)
+
+    payload: dict[str, object] = {
+        "type": "project_request",
+        "goal": goal,
+        "context": context,
+        "constraints": constraints,
+        "priority": priority,
+        "default_base_branch": str(binding.default_base_branch or "main").strip() or "main",
+        "protected_branches": [str(item) for item in binding.protected_branches],
+    }
+    if publish_repo:
+        payload["publish_repo"] = publish_repo
+
+    signal = control.signal_bus.send(
+        from_agent="user",
+        to_agent="committee",
+        signal_type=SignalType.WAKE,
+        brief=goal[:200],
+        payload=payload,
+    )
+
+    print(f"✓ 已提交  {signal.signal_id}")
+    print(f"  目标: {goal}")
+    print(f"  优先级: {priority}")
+    print()
+    if ControlHub.is_running(paths.project_root):
+        print("  引擎运行中，委员会将自动处理。")
+        print("  执行 `aura watch` 查看进度。")
+    else:
+        print("  ⚠ 后台引擎未运行")
+        print("  执行 `aura daemon start` 启动引擎")
+        print("  然后 `aura watch` 查看进度")
+    return EXIT_OK
 
 
 def _cmd_dispatch(args: argparse.Namespace) -> int:

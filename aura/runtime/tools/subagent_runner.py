@@ -10,7 +10,7 @@ from ..context import ContextBuilder
 from ..ids import new_id
 from ..llm.router import ModelRouter
 from ..llm.types import ToolSpec as LlmToolSpec
-from ..mcp.config import load_mcp_config
+from ..mcp.config import load_mcp_config, mcp_stdio_errlog_context
 from ..models import WorkSpec
 from ..registry import SpecResolutionError, SpecResolver
 from ..sandbox import SandboxManager
@@ -213,6 +213,7 @@ class SubagentRunTool:
         timeout_s: float,
         runtime_name: str,
         remote_name: str,
+        project_root: Path,
     ):
         def _execute(call_args: dict[str, Any]) -> Any:
             try:
@@ -236,59 +237,60 @@ class SubagentRunTool:
                     timeout_seconds=int(max(1.0, float(timeout_s))),
                     tool_name_prefix=prefix,
                 )
-                async with toolkit as entered:
-                    async_functions = entered.get_async_functions()
-                    target = async_functions.get(runtime_name)
-                    normalized_runtime = runtime_name.replace("___", "__")
-                    if target is None:
-                        for k, fn in async_functions.items():
-                            fn_name = str(getattr(fn, "name", k) or k)
-                            if (
-                                fn_name == runtime_name
-                                or fn_name.replace("___", "__") == normalized_runtime
-                                or str(k) == runtime_name
-                                or str(k).replace("___", "__") == normalized_runtime
-                                or fn_name == remote_name
-                                or str(k) == remote_name
-                            ):
-                                target = fn
-                                break
-                    if target is None:
-                        available = sorted(str(k) for k in async_functions.keys())
-                        raise RuntimeError(
-                            f"MCP tool not found for server={server_name!r}, runtime_name={runtime_name!r}, "
-                            f"remote_name={remote_name!r}, available={available[:20]!r}"
-                        )
-                    from agno.run import RunContext
-                    from agno.tools.function import FunctionCall
-                    from agno.tools.function import ToolResult as AgnoToolResult
+                with mcp_stdio_errlog_context(project_root=project_root, server_name=server_name):
+                    async with toolkit as entered:
+                        async_functions = entered.get_async_functions()
+                        target = async_functions.get(runtime_name)
+                        normalized_runtime = runtime_name.replace("___", "__")
+                        if target is None:
+                            for k, fn in async_functions.items():
+                                fn_name = str(getattr(fn, "name", k) or k)
+                                if (
+                                    fn_name == runtime_name
+                                    or fn_name.replace("___", "__") == normalized_runtime
+                                    or str(k) == runtime_name
+                                    or str(k).replace("___", "__") == normalized_runtime
+                                    or fn_name == remote_name
+                                    or str(k) == remote_name
+                                ):
+                                    target = fn
+                                    break
+                        if target is None:
+                            available = sorted(str(k) for k in async_functions.keys())
+                            raise RuntimeError(
+                                f"MCP tool not found for server={server_name!r}, runtime_name={runtime_name!r}, "
+                                f"remote_name={remote_name!r}, available={available[:20]!r}"
+                            )
+                        from agno.run import RunContext
+                        from agno.tools.function import FunctionCall
+                        from agno.tools.function import ToolResult as AgnoToolResult
 
-                    try:
-                        target._run_context = RunContext(
-                            run_id=f"mcp_{new_id('run')}",
-                            session_id=f"mcp_{new_id('session')}",
-                            metadata={},
-                        )
-                    except Exception:
-                        pass
+                        try:
+                            target._run_context = RunContext(
+                                run_id=f"mcp_{new_id('run')}",
+                                session_id=f"mcp_{new_id('session')}",
+                                metadata={},
+                            )
+                        except Exception:
+                            pass
 
-                    fc = FunctionCall(
-                        function=target,
-                        arguments=dict(call_args or {}),
-                        call_id=f"call_{new_id('mcp')}",
-                    )
-                    res = await fc.aexecute()
-                    if str(getattr(res, "status", "") or "") != "success":
-                        raise RuntimeError(str(getattr(res, "error", "") or "MCP tool execution failed"))
-                    raw = getattr(res, "result", None)
-                    if isinstance(raw, AgnoToolResult):
-                        out: dict[str, Any] = {"content": raw.content}
-                        if getattr(raw, "images", None):
-                            out["images"] = [
-                                img.to_dict() if hasattr(img, "to_dict") else img for img in list(raw.images or [])
-                            ]
-                        return out
-                    return raw
+                        fc = FunctionCall(
+                            function=target,
+                            arguments=dict(call_args or {}),
+                            call_id=f"call_{new_id('mcp')}",
+                        )
+                        res = await fc.aexecute()
+                        if str(getattr(res, "status", "") or "") != "success":
+                            raise RuntimeError(str(getattr(res, "error", "") or "MCP tool execution failed"))
+                        raw = getattr(res, "result", None)
+                        if isinstance(raw, AgnoToolResult):
+                            out: dict[str, Any] = {"content": raw.content}
+                            if getattr(raw, "images", None):
+                                out["images"] = [
+                                    img.to_dict() if hasattr(img, "to_dict") else img for img in list(raw.images or [])
+                                ]
+                            return out
+                        return raw
 
             timeout = max(1.0, float(timeout_s))
             return asyncio.run(asyncio.wait_for(_run_once(), timeout=timeout))
@@ -386,6 +388,7 @@ class SubagentRunTool:
                 timeout_s=float(cfg_server.timeout_s),
                 runtime_name=runtime_name,
                 remote_name=remote_name,
+                project_root=project_root,
             )
             seen_names.add(runtime_name)
 

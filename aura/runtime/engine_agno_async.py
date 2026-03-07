@@ -65,7 +65,7 @@ from .signal import SignalBus, SignalStore
 from .snapshots import GitSnapshotBackend
 from .spec_workflow import SpecProposalStore, SpecStateStore, SpecStore
 from .stores import ApprovalStore, ArtifactStore, EventLogStore, SessionStore
-from .mcp.config import load_mcp_config
+from .mcp.config import load_mcp_config, mcp_stdio_errlog_context
 from .tools import (
     AuditQueryTool,
     AuditRefsTool,
@@ -177,7 +177,6 @@ _BASE_EXPOSED_TOOL_NAMES: set[str] = {
     "skill__list",
     "skill__load",
     "skill__read_file",
-    "committee__submit",
     # Audit / signal
     "audit__query",
     "audit__refs",
@@ -251,6 +250,7 @@ class AgnoAsyncEngine:
     _mcp_functions: dict[str, Any] = field(default_factory=dict, init=False, repr=False)
     _mcp_specs: list[ToolSpec] = field(default_factory=list, init=False, repr=False)
     _mcp_loaded: bool = field(default=False, init=False, repr=False)
+    _mcp_loaded_servers: set[str] = field(default_factory=set, init=False, repr=False)
     _mcp_tool_timeout_s: dict[str, float] = field(default_factory=dict, init=False, repr=False)
     _mcp_tool_server_name: dict[str, str] = field(default_factory=dict, init=False, repr=False)
 
@@ -652,48 +652,163 @@ class AgnoAsyncEngine:
         except Exception:
             pass
 
-    async def ensure_mcp_connections(self) -> tuple[dict[str, Any], list[ToolSpec]]:
-        if self._mcp_loaded:
+    def _merge_mcp_tooling(
+        self,
+        *,
+        functions: dict[str, Any],
+        specs: list[ToolSpec],
+        tool_meta: dict[str, dict[str, Any]],
+        loaded_servers: set[str] | None = None,
+    ) -> None:
+        self._mcp_functions.update(functions)
+
+        merged_specs: dict[str, ToolSpec] = {item.name: item for item in self._mcp_specs}
+        for item in specs:
+            merged_specs[item.name] = item
+        self._mcp_specs = list(merged_specs.values())
+
+        for tool_name, meta in tool_meta.items():
+            self._mcp_tool_timeout_s[tool_name] = float(meta.get("timeout_s") or 0.0)
+            server_name = str(meta.get("server_name") or "").strip()
+            if server_name:
+                self._mcp_tool_server_name[tool_name] = server_name
+                self._mcp_loaded_servers.add(server_name)
+
+        if loaded_servers:
+            self._mcp_loaded_servers.update(str(name).strip() for name in loaded_servers if str(name).strip())
+
+    async def _ensure_mcp_servers_loaded(self, *, server_names: set[str] | None = None) -> tuple[dict[str, Any], list[ToolSpec]]:
+        selected_servers = {str(name).strip() for name in (server_names or set()) if str(name).strip()}
+        if self._mcp_loaded and not selected_servers:
             return self._mcp_functions, self._mcp_specs
+
+        missing_servers = {name for name in selected_servers if name not in self._mcp_loaded_servers}
+        if selected_servers and not missing_servers:
+            return self._mcp_functions, self._mcp_specs
+
         if self._mcp_stack is None:
             self._mcp_stack = AsyncExitStack()
+
+        target_servers = missing_servers if selected_servers else None
         try:
-            functions, specs, tool_meta = await self._load_mcp_tooling(stack=self._mcp_stack)
+            functions, specs, tool_meta = await self._load_mcp_tooling(stack=self._mcp_stack, server_names=target_servers)
         except Exception:
-            try:
-                await self._mcp_stack.aclose()
-            except Exception:
-                pass
-            self._mcp_stack = None
-            self._mcp_loaded = False
-            self._mcp_functions.clear()
-            self._mcp_specs.clear()
-            self._mcp_tool_timeout_s.clear()
-            self._mcp_tool_server_name.clear()
+            if not self._mcp_functions:
+                try:
+                    await self._mcp_stack.aclose()
+                except Exception:
+                    pass
+                self._mcp_stack = None
+                self._mcp_loaded = False
+                self._mcp_loaded_servers.clear()
+                self._mcp_functions.clear()
+                self._mcp_specs.clear()
+                self._mcp_tool_timeout_s.clear()
+                self._mcp_tool_server_name.clear()
             raise
-        self._mcp_functions = functions
-        self._mcp_specs = specs
-        self._mcp_tool_timeout_s = {
-            tool_name: float(meta.get("timeout_s") or 0.0)
-            for tool_name, meta in tool_meta.items()
-        }
-        self._mcp_tool_server_name = {
-            tool_name: str(meta.get("server_name") or "").strip()
-            for tool_name, meta in tool_meta.items()
-        }
-        self._mcp_loaded = True
+
+        self._merge_mcp_tooling(
+            functions=functions,
+            specs=specs,
+            tool_meta=tool_meta,
+            loaded_servers=(target_servers or selected_servers),
+        )
+        if not selected_servers:
+            self._mcp_loaded = True
         return self._mcp_functions, self._mcp_specs
+
+    async def ensure_mcp_connections(self) -> tuple[dict[str, Any], list[ToolSpec]]:
+        return await self._ensure_mcp_servers_loaded()
 
     async def close_mcp_connections(self) -> None:
         stack = self._mcp_stack
         self._mcp_stack = None
         self._mcp_loaded = False
+        self._mcp_loaded_servers.clear()
         self._mcp_functions.clear()
         self._mcp_specs.clear()
         self._mcp_tool_timeout_s.clear()
         self._mcp_tool_server_name.clear()
         if stack is not None:
             await stack.aclose()
+
+    def _current_agent_mcp_servers(self) -> set[str]:
+        if self.spec_resolver is None:
+            return set()
+        try:
+            bundle = self.spec_resolver.resolve_agent(self._current_agent_id(), strict=False)
+        except Exception:
+            return set()
+
+        out: set[str] = set()
+        for server in list(getattr(bundle, "mcp_servers", []) or []):
+            name = str(getattr(server, "name", "") or "").strip()
+            if name:
+                out.add(name)
+        return out
+
+    def _missing_mcp_catalog_servers(self, server_names: set[str]) -> set[str]:
+        missing: set[str] = set()
+        for server_name in server_names:
+            server_id = self.spec_registry.resolve_mcp_id_by_name(server_name)
+            server = self.spec_registry.get_mcp_server(server_id) if server_id is not None else None
+            provided = list(getattr(server, "provides_tools", []) or []) if server is not None else []
+            if not provided:
+                missing.add(server_name)
+        return missing
+
+    async def _discover_mcp_catalog_for_servers(self, server_names: set[str]) -> None:
+        selected = {str(name).strip() for name in server_names if str(name).strip()}
+        if not selected:
+            return
+        async with AsyncExitStack() as stack:
+            await self._load_mcp_tooling(stack=stack, server_names=selected)
+
+    def _mcp_server_name_for_tool(self, tool_name: str) -> str | None:
+        cleaned = str(tool_name or "").strip()
+        if not cleaned:
+            return None
+
+        server_name = str(self._mcp_tool_server_name.get(cleaned) or "").strip()
+        if server_name:
+            return server_name
+
+        spec_id = self.spec_registry.resolve_tool_id_by_runtime_name(cleaned)
+        spec = self.spec_registry.get_tool(spec_id) if spec_id is not None else None
+        if spec is None:
+            return None
+
+        metadata = spec.metadata if isinstance(spec.metadata, dict) else {}
+        server_name = str(metadata.get("server_name") or "").strip()
+        if not server_name:
+            binding = getattr(spec, "mcp_binding", None)
+            server_id = str(getattr(binding, "server_id", "") or "").strip()
+            if server_id:
+                server = self.spec_registry.get_mcp_server(server_id)
+                server_name = str(getattr(server, "name", "") or "").strip()
+        if server_name:
+            self._mcp_tool_server_name[cleaned] = server_name
+            timeout_sec = getattr(getattr(spec, "runtime", None), "timeout_sec", None)
+            if isinstance(timeout_sec, (int, float)):
+                self._mcp_tool_timeout_s.setdefault(cleaned, float(timeout_sec))
+        return server_name or None
+
+    async def _ensure_mcp_tool_loaded(self, tool_name: str) -> Any | None:
+        cleaned = str(tool_name or "").strip()
+        if not cleaned:
+            return None
+        fn = self._mcp_functions.get(cleaned)
+        if fn is not None:
+            return fn
+
+        server_name = self._mcp_server_name_for_tool(cleaned)
+        if not server_name:
+            return None
+        if server_name in self._mcp_loaded_servers and cleaned not in self._mcp_functions:
+            return None
+
+        await self._ensure_mcp_servers_loaded(server_names={server_name})
+        return self._mcp_functions.get(cleaned)
 
     async def execute_tool_once(
         self,
@@ -845,8 +960,6 @@ class AgnoAsyncEngine:
         executed: list[dict[str, Any]] = []
 
         async with AsyncExitStack():
-            mcp_functions, _mcp_specs = await self.ensure_mcp_connections()
-
             # 1) Execute the approved pending tool calls (without an extra main-agent LLM turn).
             for t in list(pending_tools):
                 if cancel.cancelled:
@@ -868,7 +981,7 @@ class AgnoAsyncEngine:
                     tool_call_id=tool_call_id,
                     arguments=dict(t.args),
                 )
-                inspection = self._inspect_tool(planned=planned, mcp_functions=mcp_functions)
+                inspection = self._inspect_tool(planned=planned, mcp_functions=self._mcp_functions)
                 decision = decision_map.get(tool_call_id)
                 tool_message = await self._execute_planned_after_decisions(
                     planned=planned,
@@ -876,7 +989,7 @@ class AgnoAsyncEngine:
                     decision=decision,
                     request_id=request_id,
                     turn_id=turn_id,
-                    mcp_functions=mcp_functions,
+                    mcp_functions=self._mcp_functions,
                 )
                 self._history.append(
                     CanonicalMessage(
@@ -928,7 +1041,7 @@ class AgnoAsyncEngine:
                 tool_call_id=call_id,
                 arguments=deepcopy(resume_args),
             )
-            inspection_sub = self._inspect_tool(planned=planned_sub, mcp_functions=mcp_functions)
+            inspection_sub = self._inspect_tool(planned=planned_sub, mcp_functions=self._mcp_functions)
             tool_message_sub = await self._execute_planned_after_decisions(
                 planned=planned_sub,
                 inspection=inspection_sub,
@@ -1084,13 +1197,12 @@ class AgnoAsyncEngine:
             )
             return RunResult(status="failed", run_id=request_id, session_id=self.session_id, error="model_resolution")
 
-        async with AsyncExitStack():
-            mcp_functions, mcp_specs = await self.ensure_mcp_connections()
 
+        async with AsyncExitStack():
             guard_id = str(turn_id or request_id)
             while True:
-                # Build system prompt and tool surface (Aura tools + MCP tools).
-                request = self._build_request(profile=profile, extra_tools=mcp_specs)
+                # Build system prompt and tool surface.
+                request = self._build_request(profile=profile)
                 context_limit_tokens = resolve_context_limit_tokens(
                     profile.limits.context_limit_tokens if profile.limits is not None else None
                 )
@@ -1130,7 +1242,7 @@ class AgnoAsyncEngine:
                             cancel=cancel,
                             context_stats=context_stats,
                             threshold_ratio=threshold_ratio,
-                            extra_tools=mcp_specs,
+                            extra_tools=None,
                         )
                         if not ok:
                             return RunResult(status="failed", run_id=request_id, session_id=self.session_id, error="compact_failed")
@@ -1174,7 +1286,7 @@ class AgnoAsyncEngine:
                     )
 
                 for planned in pending_planned:
-                    inspection = self._inspect_tool(planned=planned, mcp_functions=mcp_functions)
+                    inspection = self._inspect_tool(planned=planned, mcp_functions=self._mcp_functions)
                     tool_message = await self._execute_planned_after_decisions(
                         planned=planned,
                         inspection=inspection,
@@ -1193,7 +1305,7 @@ class AgnoAsyncEngine:
                     )
 
                 # Tool messages were appended to history; rebuild request and token estimates before resuming the loop.
-                request = self._build_request(profile=profile, extra_tools=mcp_specs)
+                request = self._build_request(profile=profile)
                 estimated_input_tokens = approx_tokens_from_json(canonical_request_to_dict(request))
                 context_stats = {
                     "estimated_input_tokens": estimated_input_tokens,
@@ -1395,7 +1507,12 @@ class AgnoAsyncEngine:
                         turn_id=turn_id,
                         step_id=None,
                     )
-                    return RunResult(status="completed", run_id=request_id, session_id=self.session_id)
+                    return RunResult(
+                        status="completed",
+                        run_id=request_id,
+                        session_id=self.session_id,
+                        assistant_text=normalized_resp.text,
+                    )
 
                 if await self._needs_more_approval(
                     request_id=request_id,
@@ -1419,7 +1536,7 @@ class AgnoAsyncEngine:
                     )
 
                 for planned in planned_calls:
-                    inspection = self._inspect_tool(planned=planned, mcp_functions=mcp_functions)
+                    inspection = self._inspect_tool(planned=planned, mcp_functions=self._mcp_functions)
                     tool_message = await self._execute_planned_after_decisions(
                         planned=planned,
                         inspection=inspection,
@@ -1542,7 +1659,7 @@ class AgnoAsyncEngine:
                                             error="Subagent requested approval.",
                                         )
 
-                request = self._build_request(profile=profile, extra_tools=mcp_specs)
+                request = self._build_request(profile=profile)
 
             await self._emit(
                 kind=EventKind.OPERATION_FAILED,
@@ -2249,28 +2366,6 @@ class AgnoAsyncEngine:
         except Exception:
             return {}, [], {}
 
-        # Suppress MCP subprocess stderr noise (e.g. mcp-remote's [PID] debug lines).
-        # Agno's MCPTools does not expose the `errlog` param of mcp.client.stdio.stdio_client,
-        # so we monkeypatch it to redirect stderr to /dev/null.
-        try:
-            import mcp.client.stdio as _mcp_stdio_mod
-
-            _original_stdio_client = getattr(_mcp_stdio_mod, "stdio_client", None)
-            if _original_stdio_client is not None and not getattr(_original_stdio_client, "_aura_patched", False):
-                import functools
-                import os as _os
-
-                @functools.wraps(_original_stdio_client)
-                def _quiet_stdio_client(*args: Any, **kwargs: Any) -> Any:
-                    if "errlog" not in kwargs:
-                        kwargs["errlog"] = open(_os.devnull, "w")  # noqa: SIM115
-                    return _original_stdio_client(*args, **kwargs)
-
-                _quiet_stdio_client._aura_patched = True  # type: ignore[attr-defined]
-                _mcp_stdio_mod.stdio_client = _quiet_stdio_client  # type: ignore[attr-defined]
-        except Exception:
-            pass
-
         def _prefix_for(server_name: str) -> str:
             # Ensure stable + short-ish prefix, avoid exceeding provider tool name limits.
             normalized = "".join(ch if (ch.isalnum() or ch in {"_", "-"}) else "_" for ch in server_name.strip())
@@ -2307,7 +2402,8 @@ class AgnoAsyncEngine:
                 timeout_seconds=int(max(1, server.timeout_s)),
                 tool_name_prefix=prefix,
             )
-            entered = await stack.enter_async_context(toolkit)
+            with mcp_stdio_errlog_context(project_root=self.project_root, server_name=name):
+                entered = await stack.enter_async_context(toolkit)
             try:
                 async_functions = entered.get_async_functions()
             except Exception:
@@ -2403,7 +2499,7 @@ class AgnoAsyncEngine:
             scope_work_spec = self._workspace_scope_work_spec()
             with self.tool_runtime.work_spec_context(scope_work_spec):
                 return self.tool_runtime.inspect(planned)
-        if planned.tool_name in mcp_functions:
+        if planned.tool_name in mcp_functions or self._mcp_server_name_for_tool(planned.tool_name):
             mode = self.tool_runtime.get_approval_mode()
             if mode is ToolApprovalMode.TRUSTED:
                 return InspectionResult(
@@ -2443,7 +2539,7 @@ class AgnoAsyncEngine:
         model_profile_id: str | None,
     ) -> bool:
         for planned in planned_calls:
-            inspection = self._inspect_tool(planned=planned, mcp_functions=mcp_functions)
+            inspection = self._inspect_tool(planned=planned, mcp_functions=self._mcp_functions)
             if inspection.decision is InspectionDecision.REQUIRE_APPROVAL and planned.tool_call_id not in decision_map:
                 await self._pause_run(
                     request_id=request_id,
@@ -2495,6 +2591,14 @@ class AgnoAsyncEngine:
             return await self._execute_mcp_tool(
                 planned=planned,
                 fn=mcp_functions[planned.tool_name],
+                request_id=request_id,
+                turn_id=turn_id,
+            )
+        lazy_mcp_fn = await self._ensure_mcp_tool_loaded(planned.tool_name)
+        if lazy_mcp_fn is not None:
+            return await self._execute_mcp_tool(
+                planned=planned,
+                fn=lazy_mcp_fn,
                 request_id=request_id,
                 turn_id=turn_id,
             )

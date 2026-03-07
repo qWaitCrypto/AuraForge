@@ -35,6 +35,7 @@ class RunResult:
     approval_id: str | None = None
     pending_tools: list[PendingToolCall] = field(default_factory=list)
     error: str | None = None
+    assistant_text: str | None = None
 
 
 @runtime_checkable

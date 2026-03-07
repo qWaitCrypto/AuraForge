@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from .bidding import BiddingConfig, BiddingService
 from .ids import new_id, now_ts_ms
 from .notifications import NotificationStore
+from .models.notification import NotificationType
 from .sandbox import SandboxManager
 from .models.signal import Signal, SignalType
 from .signal import SignalBus
@@ -52,6 +53,29 @@ def is_project_request_signal(signal: Signal) -> bool:
         return False
     payload = signal.payload if isinstance(signal.payload, dict) else {}
     return _clean_text(payload.get("type")).lower() == PROJECT_REQUEST_TYPE
+
+
+_JSON_OBJECT_BLOCK_RE = re.compile(r"```json\s*(\{.*?\})\s*```", re.IGNORECASE | re.DOTALL)
+
+
+def _parse_json_object(raw: Any) -> dict[str, Any] | None:
+    text = _clean_text(raw)
+    if not text:
+        return None
+
+    candidates = [text]
+    match = _JSON_OBJECT_BLOCK_RE.search(text)
+    if match is not None:
+        candidates.insert(0, match.group(1))
+
+    for candidate in candidates:
+        try:
+            parsed = json.loads(candidate)
+        except Exception:
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+    return None
 
 
 class CommitteeTask(BaseModel):
@@ -188,6 +212,7 @@ class CommitteeCoordinator:
     store: CommitteeStore | None = None
     default_candidates: tuple[str, ...] = ("market_worker",)
     bidding: BiddingService | None = None
+    dispatcher: Any | None = None
     sandbox_manager: Any | None = None
     notifications: NotificationStore | None = None
     bid_evaluation_mode: str = "llm_delegated"
@@ -288,6 +313,9 @@ class CommitteeCoordinator:
                 "payload_type": _clean_text(payload.get("type")).lower() or None,
             },
         )
+
+        if kind == "bid_check":
+            summary.update(self._handle_bid_check(signal=signal, session_id=session_id))
         return summary
 
     def post_process(
@@ -298,19 +326,209 @@ class CommitteeCoordinator:
         run_status: str,
         run_id: str,
         error: str | None,
+        assistant_text: str | None = None,
     ) -> None:
+        kind = self._signal_kind(signal)
+        payload = signal.payload if isinstance(signal.payload, dict) else {}
+        verification = _parse_json_object(assistant_text) if kind == "task_completed" else None
+        verify_decision = _clean_text((verification or {}).get("decision")).lower() or None
+        notification_id: str | None = None
+
+        if (
+            kind == "task_completed"
+            and _clean_text(run_status).lower() == "completed"
+            and verify_decision == "accept"
+            and self.notifications is not None
+        ):
+            summary_text = (
+                _clean_text((verification or {}).get("summary"))
+                or _clean_text(payload.get("summary"))
+                or f"{_clean_text(signal.issue_key) or 'task'} completed"
+            )
+            notification = self.notifications.create(
+                notification_type=NotificationType.TASK_COMPLETED,
+                title=f"{_clean_text(signal.issue_key) or 'Task'} completed",
+                summary=summary_text,
+                issue_key=_clean_text(signal.issue_key) or None,
+                details={
+                    "signal_id": signal.signal_id,
+                    "run_id": _clean_text(run_id) or None,
+                    "worker": _clean_text(signal.from_agent) or None,
+                    "verification": verification,
+                },
+            )
+            notification_id = notification.notification_id
+            if self.delivery_publisher is not None and self.auto_publish_on_accept:
+                try:
+                    self.delivery_publisher(notification=notification, signal=signal, verification=verification)
+                except TypeError:
+                    try:
+                        self.delivery_publisher(notification)
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+
         self.store.append_activity(
             event="committee_signal_completed",
             payload={
                 "mode": _clean_text(self.coordinator_mode).lower() or COMMITTEE_DECOMPOSITION_MODE,
-                "kind": self._signal_kind(signal),
+                "kind": kind,
                 "signal_id": signal.signal_id,
                 "session_id": session_id,
                 "run_id": _clean_text(run_id) or None,
                 "run_status": _clean_text(run_status) or None,
                 "error": _clean_text(error) or None,
+                "verify_decision": verify_decision,
+                "notification_id": notification_id,
             },
         )
+
+    def _handle_bid_check(self, *, signal: Signal, session_id: str | None) -> dict[str, Any]:
+        payload = signal.payload if isinstance(signal.payload, dict) else {}
+        issue_key = _clean_text(signal.issue_key) or _clean_text(payload.get("issue_key"))
+        if not issue_key or self.bidding is None:
+            return {"auto_action": "skipped"}
+
+        comments = self._load_bid_comments(signal=signal)
+        candidates = self._candidate_agents_for_issue(signal=signal, issue_key=issue_key)
+        record = self.bidding.get(issue_key)
+        if record is None:
+            record = self.bidding.open(issue_key=issue_key, candidates=candidates)
+
+        collected = self.bidding.collect(issue_key=issue_key, comments=comments)
+        record, decision = self.bidding.evaluate(issue_key=issue_key)
+
+        result: dict[str, Any] = {
+            "auto_action": decision.action,
+            "issue_key": issue_key,
+            "bid_count": len(collected.bids),
+        }
+
+        if decision.action == "assign" and decision.selected_agent:
+            if self.dispatcher is None:
+                result["auto_action"] = "assign_pending_dispatch"
+            else:
+                from .control.dispatcher import DispatchRequest
+
+                dispatch_result = self.dispatcher.dispatch(
+                    DispatchRequest(
+                        issue_key=issue_key,
+                        brief=_clean_text(payload.get("brief")) or f"Committee assigned {issue_key}",
+                        signal_type=SignalType.TASK_ASSIGNED,
+                        agent_id=decision.selected_agent,
+                        base_branch=_clean_text(payload.get("base_branch")) or "main",
+                        payload={
+                            "type": "committee_task",
+                            "issue_key": issue_key,
+                            "source_signal_id": signal.signal_id,
+                            "selected_agent": decision.selected_agent,
+                            "reason": decision.reason,
+                            "rejection_reasons": decision.rejection_reasons or {},
+                        },
+                    )
+                )
+                result.update({
+                    "selected_agent": decision.selected_agent,
+                    "dispatch_ok": bool(dispatch_result.dispatched),
+                })
+                self.store.append_activity(
+                    event="bidding_assigned",
+                    payload={
+                        "signal_id": signal.signal_id,
+                        "session_id": session_id,
+                        "issue_key": issue_key,
+                        "selected_agent": decision.selected_agent,
+                        "dispatch_ok": bool(dispatch_result.dispatched),
+                        "dispatch_rejection": dispatch_result.rejection_reason,
+                    },
+                )
+                if dispatch_result.dispatched:
+                    self.bidding.mark_assigned(issue_key=issue_key, selected_agent=decision.selected_agent)
+                else:
+                    result["dispatch_rejection"] = dispatch_result.rejection_reason
+            return result
+
+        if decision.action == "rebid":
+            rebid_candidates = candidates or list(record.candidates)
+            for agent_id in rebid_candidates:
+                self.signal_bus.send(
+                    from_agent=COMMITTEE_AGENT_ID,
+                    to_agent=agent_id,
+                    signal_type=SignalType.WAKE,
+                    brief=f"Rebid requested for {issue_key}",
+                    issue_key=issue_key,
+                    payload={
+                        "type": "committee_task",
+                        "issue_key": issue_key,
+                        "rebid": True,
+                        "round": int(getattr(record, 'round', 1) or 1),
+                    },
+                )
+            self.store.append_activity(
+                event="bidding_rebid_requested",
+                payload={
+                    "signal_id": signal.signal_id,
+                    "session_id": session_id,
+                    "issue_key": issue_key,
+                    "candidates": rebid_candidates,
+                },
+            )
+        return result
+
+    def _load_bid_comments(self, *, signal: Signal) -> list[Any]:
+        payload = signal.payload if isinstance(signal.payload, dict) else {}
+        comments = payload.get("comments")
+        if isinstance(comments, list):
+            return list(comments)
+
+        reader = self.linear_comments_reader
+        if reader is None:
+            return []
+
+        issue_key = _clean_text(signal.issue_key) or _clean_text(payload.get("issue_key"))
+        if not issue_key:
+            return []
+
+        attempts = (
+            lambda: reader(issue_key=issue_key, payload=payload),
+            lambda: reader(issue_key),
+            lambda: reader(signal),
+        )
+        for call in attempts:
+            try:
+                loaded = call()
+            except TypeError:
+                continue
+            except Exception:
+                return []
+            if isinstance(loaded, list):
+                return list(loaded)
+        return []
+
+    def _candidate_agents_for_issue(self, *, signal: Signal, issue_key: str) -> list[str]:
+        payload = signal.payload if isinstance(signal.payload, dict) else {}
+        ordered: list[str] = []
+        seen: set[str] = set()
+
+        def _add(raw: Any) -> None:
+            item = _clean_text(raw)
+            if not item or item == COMMITTEE_AGENT_ID or item in seen:
+                return
+            seen.add(item)
+            ordered.append(item)
+
+        for agent_id in _clean_list(payload.get("candidate_agents")):
+            _add(agent_id)
+
+        record = self.bidding.get(issue_key) if self.bidding is not None else None
+        for agent_id in list(getattr(record, "candidates", []) or []):
+            _add(agent_id)
+
+        for wake in self.signal_bus.query(issue_key=issue_key, signal_type=SignalType.WAKE, include_archive=True, limit=0):
+            _add(wake.to_agent)
+
+        return ordered
 
     def _request_from_signal(self, signal: Signal, *, allow_fallback_tasks: bool = True) -> CommitteeRequest:
         payload = signal.payload if isinstance(signal.payload, dict) else {}
