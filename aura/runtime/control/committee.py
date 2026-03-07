@@ -11,12 +11,12 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from .bidding import BiddingConfig, BiddingService
-from .ids import new_id, now_ts_ms
+from ..ids import new_id, now_ts_ms
 from .notifications import NotificationStore
-from .models.notification import NotificationType
-from .sandbox import SandboxManager
-from .models.signal import Signal, SignalType
-from .signal import SignalBus
+from ..models.notification import NotificationType
+from ..sandbox import SandboxManager
+from ..models.signal import Signal, SignalType
+from ..signal import SignalBus
 
 COMMITTEE_AGENT_ID = "committee"
 PROJECT_REQUEST_TYPE = "project_request"
@@ -409,7 +409,7 @@ class CommitteeCoordinator:
             if self.dispatcher is None:
                 result["auto_action"] = "assign_pending_dispatch"
             else:
-                from .control.dispatcher import DispatchRequest
+                from .dispatcher import DispatchRequest
 
                 dispatch_result = self.dispatcher.dispatch(
                     DispatchRequest(

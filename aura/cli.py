@@ -1888,7 +1888,7 @@ def _render_watch_snapshot(*, daemon_payload: dict[str, object], snapshot, recen
 
 
 def _cmd_watch(args: argparse.Namespace) -> int:
-    from .runtime.control_hub import ControlHub
+    from .runtime.control import ControlHub
     from .runtime.project import RuntimePaths
 
     try:
@@ -1926,7 +1926,7 @@ def _cmd_watch(args: argparse.Namespace) -> int:
 
 
 def _cmd_submit(args: argparse.Namespace) -> int:
-    from .runtime.control_hub import ControlHub
+    from .runtime.control import ControlHub
     from .runtime.models.signal import SignalType
     from .runtime.project import RuntimePaths
     from .runtime.workspace_binding import infer_publish_repo_from_git_origin, load_workspace_binding
@@ -2361,8 +2361,8 @@ def _cmd_recover_force_close(args: argparse.Namespace) -> int:
 
 
 def _build_control_hub_from_args(*, project_root: Path, args: argparse.Namespace):
-    from .runtime.agent_runner import RunnerConfig
-    from .runtime.control_hub import ControlHub, ControlHubConfig
+    from .runtime.control import RunnerConfig
+    from .runtime.control import ControlHub, ControlHubConfig
 
     runner_cfg = RunnerConfig(
         poll_interval_s=float(getattr(args, "poll_interval_s", 2.0) or 2.0),
@@ -2398,7 +2398,7 @@ async def _run_control_hub_forever(*, project_root: Path, args: argparse.Namespa
 
 
 def _cmd_daemon_start(args: argparse.Namespace) -> int:
-    from .runtime.control_hub import ControlHub
+    from .runtime.control import ControlHub
     from .runtime.project import RuntimePaths
 
     try:
@@ -2525,7 +2525,7 @@ def _cmd_daemon_run(args: argparse.Namespace) -> int:
 
 
 def _cmd_daemon_stop(_: argparse.Namespace) -> int:
-    from .runtime.control_hub import ControlHub
+    from .runtime.control import ControlHub
     from .runtime.project import RuntimePaths
 
     try:
@@ -2564,7 +2564,7 @@ def _cmd_daemon_stop(_: argparse.Namespace) -> int:
 
 
 def _cmd_daemon_status(_: argparse.Namespace) -> int:
-    from .runtime.control_hub import ControlHub
+    from .runtime.control import ControlHub
     from .runtime.project import RuntimePaths
 
     try:
@@ -2579,7 +2579,7 @@ def _cmd_daemon_status(_: argparse.Namespace) -> int:
 
 
 def _cmd_runner_sessions(_: argparse.Namespace) -> int:
-    from .runtime.agent_runner import load_runner_sessions_snapshot
+    from .runtime.control import load_runner_sessions_snapshot
     from .runtime.project import RuntimePaths
 
     try:
@@ -2621,7 +2621,7 @@ def _cmd_runner_wake(args: argparse.Namespace) -> int:
 
 
 def _cmd_notifications(args: argparse.Namespace) -> int:
-    from .runtime.notifications import NotificationStore
+    from .runtime.control import NotificationStore
     from .runtime.project import RuntimePaths
 
     try:

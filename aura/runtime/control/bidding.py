@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from .ids import now_ts_ms
-from .models.bidding import BidEntry, BiddingPhase, BiddingRecord
+from ..ids import now_ts_ms
+from ..models.bidding import BidEntry, BiddingPhase, BiddingRecord
 
 _BID_JSON_BLOCK_RE = re.compile(r"```json\s*(\{.*?\})\s*```", re.IGNORECASE | re.DOTALL)
 

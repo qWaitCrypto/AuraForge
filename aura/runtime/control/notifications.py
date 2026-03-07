@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .ids import new_id
-from .models.notification import NotificationType, UserNotification
+from ..ids import new_id
+from ..models.notification import NotificationType, UserNotification
 
 
 def _clean_text(value: Any) -> str:

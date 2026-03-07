@@ -91,9 +91,29 @@ def build_control_plane(*, project_root: Path) -> ControlPlane:
         circuit_breaker=circuit_breaker,
         dashboard=dashboard,
     )
+from .bidding import BiddingConfig, BiddingService, BiddingStore, parse_bid_from_comment
+from .committee import COMMITTEE_AGENT_ID, CommitteeCoordinator, CommitteeRequestStatus
+from .notifications import NotificationStore
+from .runner import AgentRunner, RunnerApprovalPolicy, RunnerConfig, load_runner_sessions_snapshot
+from .hub import ControlHub, ControlHubConfig
+
 
 
 __all__ = [
+    "AgentRunner",
+    "BiddingConfig",
+    "BiddingService",
+    "BiddingStore",
+    "COMMITTEE_AGENT_ID",
+    "CommitteeCoordinator",
+    "CommitteeRequestStatus",
+    "ControlHub",
+    "ControlHubConfig",
+    "NotificationStore",
+    "RunnerApprovalPolicy",
+    "RunnerConfig",
+    "load_runner_sessions_snapshot",
+    "parse_bid_from_comment",
     "AgentStatusTracker",
     "AgentRow",
     "BreakerConfig",
