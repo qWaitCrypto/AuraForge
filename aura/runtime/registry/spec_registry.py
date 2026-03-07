@@ -328,12 +328,16 @@ class SpecRegistry:
         skill_store: "SkillStore | None",
         mcp_config: McpConfig | None,
         include_builtin_subagents: bool = True,
+        include_market_catalog: bool = True,
+        clear_existing: bool = True,
     ) -> None:
-        self.clear()
+        if clear_existing:
+            self.clear()
 
         # Load market assets first so runtime/local overlays can upgrade them in-place
         # (notably MCP server specs and MCP proxy tools).
-        self._load_market_catalog_specs()
+        if include_market_catalog:
+            self._load_market_catalog_specs()
 
         if tool_registry is not None:
             self._load_tool_specs(tool_registry=tool_registry)
@@ -343,6 +347,58 @@ class SpecRegistry:
             self._load_mcp_specs(mcp_config=mcp_config)
         if include_builtin_subagents:
             self._load_builtin_subagent_agents()
+
+    def load_catalog_snapshot(self, *, path: Path | None = None) -> bool:
+        snapshot_path = path
+        if snapshot_path is None:
+            snapshot_path = self._project_root / ".aura" / "state" / "market" / "spec_catalog.json"
+        snapshot_path = snapshot_path.expanduser().resolve()
+        if not snapshot_path.exists() or not snapshot_path.is_file():
+            return False
+
+        try:
+            raw = json.loads(snapshot_path.read_text(encoding="utf-8"))
+        except Exception:
+            return False
+        if not isinstance(raw, dict):
+            return False
+
+        agents_raw = raw.get("agents")
+        skills_raw = raw.get("skills")
+        tools_raw = raw.get("tools")
+        mcp_servers_raw = raw.get("mcp_servers")
+        if not (
+            isinstance(agents_raw, list)
+            and isinstance(skills_raw, list)
+            and isinstance(tools_raw, list)
+            and isinstance(mcp_servers_raw, list)
+        ):
+            return False
+
+        self.clear()
+        try:
+            for item in tools_raw:
+                if not isinstance(item, dict):
+                    continue
+                self.upsert_tool(ToolSpec.model_validate(item))
+            for item in mcp_servers_raw:
+                if not isinstance(item, dict):
+                    continue
+                self.upsert_mcp_server(McpServerSpec.model_validate(item))
+            for item in skills_raw:
+                if not isinstance(item, dict):
+                    continue
+                self.upsert_skill(SkillSpec.model_validate(item))
+            for item in agents_raw:
+                if not isinstance(item, dict):
+                    continue
+                spec = AgentSpec.model_validate(item)
+                aliases = self._agent_aliases_from_metadata(spec)
+                self.upsert_agent(spec, aliases=aliases)
+        except Exception:
+            self.clear()
+            return False
+        return True
 
     def _load_tool_specs(self, *, tool_registry: "ToolRegistry") -> None:
         for tool in tool_registry.list_specs():
@@ -484,10 +540,13 @@ class SpecRegistry:
         if not kind_dir.exists() or not kind_dir.is_dir():
             scanned: list[Path] = []
         else:
+            # Fast path: `rglob` is already rooted at `<root>/<kind>/`, so avoid
+            # per-file `resolve()` (very expensive on some filesystems, e.g. WSL/NTFS).
+            # We still skip symlink files explicitly.
             scanned = sorted(
                 path
                 for path in kind_dir.rglob("*.json")
-                if path.is_file() and not path.is_symlink() and self._is_within(root, path.resolve())
+                if path.is_file() and not path.is_symlink()
             )
 
         out: list[Path] = []

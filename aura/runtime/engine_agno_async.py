@@ -245,6 +245,14 @@ class AgnoAsyncEngine:
     _auto_compact_seen_turn_ids: set[str] = field(default_factory=set, init=False, repr=False)
     _event_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
     _event_sequence: int = field(default=0, init=False, repr=False)
+    _loop: asyncio.AbstractEventLoop | None = field(default=None, init=False, repr=False)
+    _loop_owner_thread_id: int | None = field(default=None, init=False, repr=False)
+    _mcp_stack: AsyncExitStack | None = field(default=None, init=False, repr=False)
+    _mcp_functions: dict[str, Any] = field(default_factory=dict, init=False, repr=False)
+    _mcp_specs: list[ToolSpec] = field(default_factory=list, init=False, repr=False)
+    _mcp_loaded: bool = field(default=False, init=False, repr=False)
+    _mcp_tool_timeout_s: dict[str, float] = field(default_factory=dict, init=False, repr=False)
+    _mcp_tool_server_name: dict[str, str] = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
         self.project_root = self.project_root.expanduser().resolve()
@@ -345,11 +353,17 @@ class AgnoAsyncEngine:
         except Exception:
             mcp_cfg = None
         try:
+            # Fast path: reuse the last catalog snapshot, then overlay runtime-local
+            # assets (tools/skills/mcp config) without rescanning the full market tree.
+            # This cuts cold CLI startup cost on large/slow filesystems.
+            loaded_snapshot = self.spec_registry.load_catalog_snapshot()
             self.spec_registry.refresh_from_runtime(
                 tool_registry=self.tool_registry,
                 skill_store=self.skill_store,
                 mcp_config=mcp_cfg,
                 include_builtin_subagents=True,
+                include_market_catalog=not loaded_snapshot,
+                clear_existing=not loaded_snapshot,
             )
             self.spec_registry.write_catalog_snapshot()
         except Exception:
@@ -591,7 +605,95 @@ class AgnoAsyncEngine:
 
         Async surfaces should call `await engine.arun(...)` directly.
         """
-        return asyncio.run(self.arun(op, timeout_s=timeout_s, cancel=cancel))
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop is not None and loop.is_running():
+            raise RuntimeError("run() cannot be called inside a running event loop; use arun().")
+
+        owner_thread = threading.get_ident()
+        if (
+            self._loop is None
+            or self._loop.is_closed()
+            or self._loop_owner_thread_id != owner_thread
+        ):
+            if self._loop is not None and not self._loop.is_closed():
+                try:
+                    self._loop.run_until_complete(self.close_mcp_connections())
+                except Exception:
+                    pass
+                try:
+                    self._loop.close()
+                except Exception:
+                    pass
+            self._loop = asyncio.new_event_loop()
+            self._loop_owner_thread_id = owner_thread
+
+        return self._loop.run_until_complete(self.arun(op, timeout_s=timeout_s, cancel=cancel))
+
+    def close(self) -> None:
+        """
+        Best-effort synchronous cleanup for interactive chat lifecycle.
+        """
+        loop = self._loop
+        self._loop = None
+        self._loop_owner_thread_id = None
+        if loop is None or loop.is_closed():
+            return
+        if loop.is_running():
+            return
+        try:
+            loop.run_until_complete(self.close_mcp_connections())
+        except Exception:
+            pass
+        try:
+            loop.close()
+        except Exception:
+            pass
+
+    async def ensure_mcp_connections(self) -> tuple[dict[str, Any], list[ToolSpec]]:
+        if self._mcp_loaded:
+            return self._mcp_functions, self._mcp_specs
+        if self._mcp_stack is None:
+            self._mcp_stack = AsyncExitStack()
+        try:
+            functions, specs, tool_meta = await self._load_mcp_tooling(stack=self._mcp_stack)
+        except Exception:
+            try:
+                await self._mcp_stack.aclose()
+            except Exception:
+                pass
+            self._mcp_stack = None
+            self._mcp_loaded = False
+            self._mcp_functions.clear()
+            self._mcp_specs.clear()
+            self._mcp_tool_timeout_s.clear()
+            self._mcp_tool_server_name.clear()
+            raise
+        self._mcp_functions = functions
+        self._mcp_specs = specs
+        self._mcp_tool_timeout_s = {
+            tool_name: float(meta.get("timeout_s") or 0.0)
+            for tool_name, meta in tool_meta.items()
+        }
+        self._mcp_tool_server_name = {
+            tool_name: str(meta.get("server_name") or "").strip()
+            for tool_name, meta in tool_meta.items()
+        }
+        self._mcp_loaded = True
+        return self._mcp_functions, self._mcp_specs
+
+    async def close_mcp_connections(self) -> None:
+        stack = self._mcp_stack
+        self._mcp_stack = None
+        self._mcp_loaded = False
+        self._mcp_functions.clear()
+        self._mcp_specs.clear()
+        self._mcp_tool_timeout_s.clear()
+        self._mcp_tool_server_name.clear()
+        if stack is not None:
+            await stack.aclose()
 
     async def execute_tool_once(
         self,
@@ -623,8 +725,12 @@ class AgnoAsyncEngine:
         """
         Discover MCP runtime tool names via configured servers.
         """
+        if not server_names:
+            mcp_functions, _ = await self.ensure_mcp_connections()
+            return sorted(mcp_functions.keys())
+
         async with AsyncExitStack() as stack:
-            mcp_functions, _ = await self._load_mcp_tooling(stack=stack, server_names=server_names)
+            mcp_functions, _, _ = await self._load_mcp_tooling(stack=stack, server_names=server_names)
         return sorted(mcp_functions.keys())
 
     async def continue_run(
@@ -738,8 +844,8 @@ class AgnoAsyncEngine:
 
         executed: list[dict[str, Any]] = []
 
-        async with AsyncExitStack() as stack:
-            mcp_functions, _mcp_specs = await self._load_mcp_tooling(stack=stack)
+        async with AsyncExitStack():
+            mcp_functions, _mcp_specs = await self.ensure_mcp_connections()
 
             # 1) Execute the approved pending tool calls (without an extra main-agent LLM turn).
             for t in list(pending_tools):
@@ -978,8 +1084,8 @@ class AgnoAsyncEngine:
             )
             return RunResult(status="failed", run_id=request_id, session_id=self.session_id, error="model_resolution")
 
-        async with AsyncExitStack() as stack:
-            mcp_functions, mcp_specs = await self._load_mcp_tooling(stack=stack)
+        async with AsyncExitStack():
+            mcp_functions, mcp_specs = await self.ensure_mcp_connections()
 
             guard_id = str(turn_id or request_id)
             while True:
@@ -1104,104 +1210,152 @@ class AgnoAsyncEngine:
             for _ in range(self.max_tool_turns):
                 caps = profile.capabilities.with_provider_defaults(profile.provider_kind)
                 use_stream = bool(self.llm_streaming and caps.supports_streaming is True)
-                step_id = new_id("step")
-                await self._emit(
-                    kind=EventKind.LLM_REQUEST_STARTED,
-                    payload={
-                        "role": ModelRole.MAIN.value,
-                        "context_ref": self._write_context_ref(request).to_dict(),
-                        "profile_id": getattr(profile, "profile_id", None),
-                        "timeout_s": timeout_s if timeout_s is not None else getattr(profile, "timeout_s", None),
-                        "stream": use_stream,
-                        "context_stats": dict(context_stats),
-                        "run_mode": "llm_tools",
-                    },
-                    request_id=request_id,
-                    turn_id=turn_id,
-                    step_id=step_id,
-                )
+                used_stream = use_stream
+                while True:
+                    step_id = new_id("step")
+                    await self._emit(
+                        kind=EventKind.LLM_REQUEST_STARTED,
+                        payload={
+                            "role": ModelRole.MAIN.value,
+                            "context_ref": self._write_context_ref(request).to_dict(),
+                            "profile_id": getattr(profile, "profile_id", None),
+                            "timeout_s": timeout_s if timeout_s is not None else getattr(profile, "timeout_s", None),
+                            "stream": used_stream,
+                            "context_stats": dict(context_stats),
+                            "run_mode": "llm_tools",
+                        },
+                        request_id=request_id,
+                        turn_id=turn_id,
+                        step_id=step_id,
+                    )
 
-                try:
-                    if use_stream:
-                        resp = await self._run_agent_stream(
-                            request=request,
-                            profile=profile,
+                    try:
+                        if used_stream:
+                            resp = await self._run_agent_stream(
+                                request=request,
+                                profile=profile,
+                                request_id=request_id,
+                                turn_id=turn_id,
+                                step_id=step_id,
+                                timeout_s=timeout_s,
+                                cancel=cancel,
+                            )
+                        else:
+                            resp = await self._run_agent_once(
+                                request=request,
+                                profile=profile,
+                                request_id=request_id,
+                                turn_id=turn_id,
+                                timeout_s=timeout_s,
+                                cancel=cancel,
+                            )
+                    except LLMRequestError as e:
+                        await self._emit(
+                            kind=EventKind.LLM_REQUEST_FAILED,
+                            payload={
+                                "role": ModelRole.MAIN.value,
+                                "error": str(e),
+                                "error_code": e.code.value,
+                                "retryable": bool(e.retryable),
+                                "status_code": e.status_code,
+                                "provider_kind": (e.provider_kind.value if e.provider_kind is not None else None),
+                                "profile_id": e.profile_id,
+                                "model": e.model,
+                                "request_id": e.request_id,
+                                "details": dict(e.details) if isinstance(e.details, dict) else None,
+                            },
                             request_id=request_id,
                             turn_id=turn_id,
                             step_id=step_id,
-                            timeout_s=timeout_s,
-                            cancel=cancel,
                         )
-                    else:
-                        resp = await self._run_agent_once(
-                            request=request,
-                            profile=profile,
+                        await self._emit(
+                            kind=EventKind.OPERATION_FAILED,
+                            payload={
+                                "op_kind": OpKind.CHAT.value,
+                                "error": str(e),
+                                "error_code": e.code.value,
+                                "type": "llm_request",
+                            },
                             request_id=request_id,
                             turn_id=turn_id,
-                            timeout_s=timeout_s,
-                            cancel=cancel,
+                            step_id=None,
                         )
-                except LLMRequestError as e:
-                    await self._emit(
-                        kind=EventKind.LLM_REQUEST_FAILED,
-                        payload={
-                            "role": ModelRole.MAIN.value,
-                            "error": str(e),
-                            "error_code": e.code.value,
-                            "retryable": bool(e.retryable),
-                            "status_code": e.status_code,
-                            "provider_kind": (e.provider_kind.value if e.provider_kind is not None else None),
-                            "profile_id": e.profile_id,
-                            "model": e.model,
-                            "request_id": e.request_id,
-                            "details": dict(e.details) if isinstance(e.details, dict) else None,
-                        },
-                        request_id=request_id,
-                        turn_id=turn_id,
-                        step_id=step_id,
-                    )
-                    await self._emit(
-                        kind=EventKind.OPERATION_FAILED,
-                        payload={
-                            "op_kind": OpKind.CHAT.value,
-                            "error": str(e),
-                            "error_code": e.code.value,
-                            "type": "llm_request",
-                        },
-                        request_id=request_id,
-                        turn_id=turn_id,
-                        step_id=None,
-                    )
-                    return RunResult(status="failed", run_id=request_id, session_id=self.session_id, error=e.code.value)
-                except Exception as e:
-                    await self._emit(
-                        kind=EventKind.LLM_REQUEST_FAILED,
-                        payload={
-                            "role": ModelRole.MAIN.value,
-                            "error": str(e),
-                            "error_code": ErrorCode.UNKNOWN.value,
-                            "retryable": False,
-                            "details": {"operation": "complete"},
-                        },
-                        request_id=request_id,
-                        turn_id=turn_id,
-                        step_id=step_id,
-                    )
-                    await self._emit(
-                        kind=EventKind.OPERATION_FAILED,
-                        payload={
-                            "op_kind": OpKind.CHAT.value,
-                            "error": str(e),
-                            "error_code": ErrorCode.UNKNOWN.value,
-                            "type": "llm_request",
-                        },
-                        request_id=request_id,
-                        turn_id=turn_id,
-                        step_id=None,
-                    )
-                    return RunResult(status="failed", run_id=request_id, session_id=self.session_id, error="llm_request_failed")
-                tool_calls = _normalize_tool_calls(resp.tool_calls)
-                normalized_resp = replace(resp, tool_calls=tool_calls)
+                        return RunResult(status="failed", run_id=request_id, session_id=self.session_id, error=e.code.value)
+                    except Exception as e:
+                        await self._emit(
+                            kind=EventKind.LLM_REQUEST_FAILED,
+                            payload={
+                                "role": ModelRole.MAIN.value,
+                                "error": str(e),
+                                "error_code": ErrorCode.UNKNOWN.value,
+                                "retryable": False,
+                                "details": {"operation": "complete"},
+                            },
+                            request_id=request_id,
+                            turn_id=turn_id,
+                            step_id=step_id,
+                        )
+                        await self._emit(
+                            kind=EventKind.OPERATION_FAILED,
+                            payload={
+                                "op_kind": OpKind.CHAT.value,
+                                "error": str(e),
+                                "error_code": ErrorCode.UNKNOWN.value,
+                                "type": "llm_request",
+                            },
+                            request_id=request_id,
+                            turn_id=turn_id,
+                            step_id=None,
+                        )
+                        return RunResult(status="failed", run_id=request_id, session_id=self.session_id, error="llm_request_failed")
+
+                    tool_calls = _normalize_tool_calls(resp.tool_calls)
+                    normalized_resp = replace(resp, tool_calls=tool_calls)
+                    if self._is_effectively_empty_response(normalized_resp):
+                        if used_stream:
+                            await self._emit(
+                                kind=EventKind.LLM_REQUEST_FAILED,
+                                payload={
+                                    "role": ModelRole.MAIN.value,
+                                    "error": "Model returned an empty streaming response; retrying without streaming.",
+                                    "error_code": ErrorCode.UNKNOWN.value,
+                                    "retryable": True,
+                                    "handled": "fallback_to_complete",
+                                    "details": {"reason": "empty_response", "phase": "complete"},
+                                },
+                                request_id=request_id,
+                                turn_id=turn_id,
+                                step_id=step_id,
+                            )
+                            used_stream = False
+                            continue
+                        await self._emit(
+                            kind=EventKind.LLM_REQUEST_FAILED,
+                            payload={
+                                "role": ModelRole.MAIN.value,
+                                "error": "Model returned an empty response.",
+                                "error_code": ErrorCode.UNKNOWN.value,
+                                "retryable": False,
+                                "details": {"reason": "empty_response", "phase": "complete"},
+                            },
+                            request_id=request_id,
+                            turn_id=turn_id,
+                            step_id=step_id,
+                        )
+                        await self._emit(
+                            kind=EventKind.OPERATION_FAILED,
+                            payload={
+                                "op_kind": OpKind.CHAT.value,
+                                "error": "Model returned an empty response.",
+                                "error_code": ErrorCode.UNKNOWN.value,
+                                "type": "llm_empty_response",
+                            },
+                            request_id=request_id,
+                            turn_id=turn_id,
+                            step_id=None,
+                        )
+                        return RunResult(status="failed", run_id=request_id, session_id=self.session_id, error="empty_response")
+                    break
 
                 planned_calls: list[PlannedToolCall] = []
                 if tool_calls:
@@ -1222,7 +1376,7 @@ class AgnoAsyncEngine:
                     request_id=request_id,
                     turn_id=turn_id,
                     step_id=step_id,
-                    extra_payload={"stream": use_stream, "run_mode": "llm_tools"},
+                    extra_payload={"stream": used_stream, "run_mode": "llm_tools"},
                 )
 
                 self._history.append(
@@ -1758,6 +1912,8 @@ class AgnoAsyncEngine:
         threading.Thread(target=_producer, name="aura-llm-stream", daemon=True).start()
 
         final: LLMResponse | None = None
+        streamed_text_deltas: list[str] = []
+        streamed_tool_calls: list[ToolCall] = []
         while True:
             item = await q.get()
             if item is None:
@@ -1776,6 +1932,7 @@ class AgnoAsyncEngine:
                     )
             elif ev.kind == LLMStreamEventKind.TEXT_DELTA:
                 if ev.text_delta:
+                    streamed_text_deltas.append(ev.text_delta)
                     await self._emit(
                         kind=EventKind.LLM_RESPONSE_DELTA,
                         payload={"text_delta": ev.text_delta},
@@ -1783,12 +1940,20 @@ class AgnoAsyncEngine:
                         turn_id=turn_id,
                         step_id=step_id,
                     )
+            elif ev.kind == LLMStreamEventKind.TOOL_CALL:
+                if ev.tool_call is not None:
+                    streamed_tool_calls.append(ev.tool_call)
             elif ev.kind == LLMStreamEventKind.COMPLETED:
                 if ev.response is not None:
                     final = ev.response
 
         if final is None:
             raise RuntimeError("Stream ended without a terminal response.")
+        final = self._coalesce_stream_terminal_response(
+            final=final,
+            streamed_text_deltas=streamed_text_deltas,
+            streamed_tool_calls=streamed_tool_calls,
+        )
         if trace is not None:
             try:
                 trace.record_response(final)
@@ -1897,23 +2062,57 @@ class AgnoAsyncEngine:
         return names
 
     def _workspace_system_prompt_block(self) -> str | None:
+        meta = self._session_metadata()
+        publish_repo = str(meta.get("publish_repo") or "").strip() or "unknown"
+        default_base_branch = str(meta.get("default_base_branch") or "").strip() or "main"
+        protected_raw = meta.get("protected_branches")
+        protected_text = ""
+        if isinstance(protected_raw, list):
+            items: list[str] = []
+            seen: set[str] = set()
+            for raw in protected_raw:
+                item = str(raw or "").strip()
+                if not item or item in seen:
+                    continue
+                seen.add(item)
+                items.append(item)
+            if items:
+                protected_text = ", ".join(items)
+
         sandbox = self._current_sandbox()
-        if sandbox is None:
-            return None
         lines = [
             "Sandbox Context (authoritative)",
-            f"- sandbox_id: {sandbox.sandbox_id}",
-            f"- agent_id: {sandbox.agent_id}",
-            f"- issue_key: {sandbox.issue_key}",
-            f"- base_branch: {sandbox.base_branch}",
-            f"- branch: {sandbox.branch}",
-            f"- worktree_path: {sandbox.worktree_path}",
-            "",
-            "Runtime Rules",
-            "- Operate only inside the bound worktree path unless explicitly approved.",
-            "- Use skills for Linear/GitHub external actions.",
-            "- EventLog captures evidence automatically (no workspace submission tools).",
+            f"- publish_repo: {publish_repo}",
+            f"- default_base_branch: {default_base_branch}",
         ]
+        if protected_text:
+            lines.append(f"- protected_branches: {protected_text}")
+
+        if sandbox is not None:
+            lines.extend(
+                [
+                    f"- sandbox_id: {sandbox.sandbox_id}",
+                    f"- agent_id: {sandbox.agent_id}",
+                    f"- issue_key: {sandbox.issue_key}",
+                    f"- base_branch: {sandbox.base_branch}",
+                    f"- branch: {sandbox.branch}",
+                    f"- worktree_path: {sandbox.worktree_path}",
+                    "",
+                    "Runtime Rules",
+                    "- Operate only inside the bound worktree path unless explicitly approved.",
+                    "- Use skills for Linear/GitHub external actions.",
+                    "- EventLog captures evidence automatically (no workspace submission tools).",
+                ]
+            )
+        else:
+            lines.extend(
+                [
+                    "",
+                    "Runtime Rules",
+                    "- Publish actions must target the bound publish_repo.",
+                    "- If user asks target repository, answer from publish_repo directly.",
+                ]
+            )
         return "\n".join(lines)
 
     def _workspace_scope_work_spec(self) -> WorkSpec | None:
@@ -2028,7 +2227,7 @@ class AgnoAsyncEngine:
         *,
         stack: AsyncExitStack,
         server_names: set[str] | None = None,
-    ) -> tuple[dict[str, Any], list[ToolSpec]]:
+    ) -> tuple[dict[str, Any], list[ToolSpec], dict[str, dict[str, Any]]]:
         """
         Build MCPTools instances from `.aura/config/mcp.json`, enter them, and return:
         - mapping: tool_name -> agno Function (async)
@@ -2036,10 +2235,11 @@ class AgnoAsyncEngine:
         """
         cfg = load_mcp_config(project_root=self.project_root)
         if not cfg.servers:
-            return {}, []
+            return {}, [], {}
 
         functions: dict[str, Any] = {}
         specs: list[ToolSpec] = []
+        tool_meta: dict[str, dict[str, Any]] = {}
         spec_registry_updated = False
 
         try:
@@ -2047,7 +2247,29 @@ class AgnoAsyncEngine:
             from mcp import StdioServerParameters
             from mcp.client.stdio import get_default_environment
         except Exception:
-            return {}, []
+            return {}, [], {}
+
+        # Suppress MCP subprocess stderr noise (e.g. mcp-remote's [PID] debug lines).
+        # Agno's MCPTools does not expose the `errlog` param of mcp.client.stdio.stdio_client,
+        # so we monkeypatch it to redirect stderr to /dev/null.
+        try:
+            import mcp.client.stdio as _mcp_stdio_mod
+
+            _original_stdio_client = getattr(_mcp_stdio_mod, "stdio_client", None)
+            if _original_stdio_client is not None and not getattr(_original_stdio_client, "_aura_patched", False):
+                import functools
+                import os as _os
+
+                @functools.wraps(_original_stdio_client)
+                def _quiet_stdio_client(*args: Any, **kwargs: Any) -> Any:
+                    if "errlog" not in kwargs:
+                        kwargs["errlog"] = open(_os.devnull, "w")  # noqa: SIM115
+                    return _original_stdio_client(*args, **kwargs)
+
+                _quiet_stdio_client._aura_patched = True  # type: ignore[attr-defined]
+                _mcp_stdio_mod.stdio_client = _quiet_stdio_client  # type: ignore[attr-defined]
+        except Exception:
+            pass
 
         def _prefix_for(server_name: str) -> str:
             # Ensure stable + short-ish prefix, avoid exceeding provider tool name limits.
@@ -2067,6 +2289,12 @@ class AgnoAsyncEngine:
                 continue
             prefix = _prefix_for(name)
             env = {**get_default_environment(), **dict(server.env or {})}
+            env.setdefault("MCP_REMOTE_LOG_LEVEL", "error")
+            # Suppress verbose/debug output from mcp-remote and Node.js MCP servers.
+            env.setdefault("MCP_REMOTE_VERBOSE", "0")
+            env.setdefault("NODE_NO_WARNINGS", "1")
+            # Remove DEBUG if set — some MCP transports honour the `debug` npm convention.
+            env.pop("DEBUG", None)
             server_params = StdioServerParameters(
                 command=server.command,
                 args=list(server.args),
@@ -2087,6 +2315,10 @@ class AgnoAsyncEngine:
             runtime_rows: list[dict[str, Any]] = []
             for tool_name, fn in async_functions.items():
                 functions[tool_name] = fn
+                tool_meta[tool_name] = {
+                    "server_name": name,
+                    "timeout_s": float(max(1.0, float(server.timeout_s))),
+                }
                 fn_name = str(getattr(fn, "name", tool_name) or tool_name)
                 remote_name = fn_name
                 if remote_name.startswith(prefix):
@@ -2126,7 +2358,7 @@ class AgnoAsyncEngine:
             except Exception:
                 pass
 
-        return functions, specs
+        return functions, specs, tool_meta
 
     def _inspect_tool(self, *, planned: PlannedToolCall, mcp_functions: dict[str, Any]):
         """
@@ -2377,7 +2609,8 @@ class AgnoAsyncEngine:
             except Exception:
                 pass
             fc = FunctionCall(function=fn, arguments=dict(planned.arguments), call_id=planned.tool_call_id)
-            res = await fc.aexecute()
+            timeout_s = self._mcp_timeout_for_tool(planned.tool_name)
+            res = await asyncio.wait_for(fc.aexecute(), timeout=timeout_s)
             if res.status != "success":
                 raise RuntimeError(res.error or "MCP tool execution failed")
             raw = res.result
@@ -2387,6 +2620,9 @@ class AgnoAsyncEngine:
                     raw_out["images"] = [img.to_dict() if hasattr(img, "to_dict") else img for img in raw.images]
                 raw = raw_out
         except Exception as e:
+            mcp_reset = False
+            if self._should_reset_mcp_after_error(e):
+                mcp_reset = await self._safe_reset_mcp_connections()
             duration_ms = int((time.monotonic() - started) * 1000)
             code = _classify_tool_exception(e)
             result_payload = {"ok": False, "tool": planned.tool_name, "error_code": code.value, "error": str(e), "result": None}
@@ -2414,6 +2650,7 @@ class AgnoAsyncEngine:
                     "error_code": code.value,
                     "error": str(e),
                     "tool_kind": "mcp",
+                    "mcp_reset": mcp_reset,
                 },
                 request_id=request_id,
                 turn_id=turn_id,
@@ -2464,6 +2701,78 @@ class AgnoAsyncEngine:
             actor=actor_ctx,
         )
         return tool_message
+
+    def _mcp_timeout_for_tool(self, tool_name: str) -> float:
+        value = float(self._mcp_tool_timeout_s.get(str(tool_name or "").strip(), 0.0) or 0.0)
+        if value <= 0:
+            return 60.0
+        # Give a small grace window beyond server timeout to avoid abrupt cancellation races.
+        return max(5.0, value + 5.0)
+
+    def _should_reset_mcp_after_error(self, err: BaseException) -> bool:
+        if isinstance(err, asyncio.TimeoutError):
+            return True
+        text = str(err or "").lower()
+        markers = (
+            "sse stream disconnected",
+            "failed to reconnect sse stream",
+            "maximum reconnection attempts",
+            "fetch failed",
+            "timed out",
+            "etimedout",
+            "econnreset",
+            "ehostunreach",
+            "enetunreach",
+            "terminated",
+            "connection reset",
+            "connection refused",
+        )
+        return any(marker in text for marker in markers)
+
+    async def _safe_reset_mcp_connections(self) -> bool:
+        try:
+            await self.close_mcp_connections()
+            return True
+        except Exception:
+            return False
+
+    @staticmethod
+    def _is_effectively_empty_response(resp: LLMResponse) -> bool:
+        if list(resp.tool_calls or ()):
+            return False
+        return not str(resp.text or "").strip()
+
+    @staticmethod
+    def _coalesce_stream_terminal_response(
+        *,
+        final: LLMResponse,
+        streamed_text_deltas: list[str],
+        streamed_tool_calls: list[ToolCall],
+    ) -> LLMResponse:
+        merged_text = str(final.text or "")
+        if not merged_text.strip():
+            fallback_text = "".join(str(item) for item in streamed_text_deltas if isinstance(item, str))
+            if fallback_text.strip():
+                merged_text = fallback_text
+
+        merged_calls = list(final.tool_calls or ())
+        if streamed_tool_calls:
+            deduped: list[ToolCall] = []
+            seen: set[str] = set()
+            for tc in [*merged_calls, *streamed_tool_calls]:
+                key = (
+                    f"{str(tc.tool_call_id or '')}|{tc.name}|{tc.raw_arguments or ''}|"
+                    f"{json.dumps(tc.arguments, ensure_ascii=False, sort_keys=True)}"
+                )
+                if key in seen:
+                    continue
+                seen.add(key)
+                deduped.append(tc)
+            merged_calls = deduped
+
+        if merged_text == final.text and merged_calls == list(final.tool_calls or ()):
+            return final
+        return replace(final, text=merged_text, tool_calls=merged_calls)
 
     def _write_context_ref(self, request: CanonicalRequest) -> ArtifactRef:
         payload = _canonical_request_to_redacted_dict(request)

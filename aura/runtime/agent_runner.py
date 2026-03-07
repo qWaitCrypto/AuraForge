@@ -474,6 +474,19 @@ class AgentRunner:
             session.state = AgentSessionState.STOPPED
             session.last_active_at = now_ts_ms()
             self._record_session_event(session=session, kind=LogEventKind.SESSION_END, summary="agent session stopped")
+            close_mcp = getattr(engine, "close_mcp_connections", None)
+            if callable(close_mcp):
+                try:
+                    await asyncio.shield(close_mcp())
+                except Exception as exc:
+                    self._append_metric(
+                        "agent_mcp_close_failed",
+                        {
+                            "agent_id": agent_id,
+                            "session_id": session.session_id,
+                            "error": str(exc),
+                        },
+                    )
 
             self._engines.pop(agent_id, None)
             self._tasks.pop(agent_id, None)

@@ -560,6 +560,7 @@ def _cmd_chat(args: argparse.Namespace) -> int:
     from .runtime.project import RuntimePaths
     from .runtime.stores import FileApprovalStore, FileArtifactStore, FileEventLogStore, FileSessionStore
     from .runtime.tools.runtime import ToolApprovalMode
+    from .runtime.workspace_binding import infer_publish_repo_from_git_origin, load_workspace_binding
 
     try:
         paths = RuntimePaths.discover()
@@ -653,6 +654,31 @@ def _cmd_chat(args: argparse.Namespace) -> int:
     if session_meta.get("tool_approval_mode") != approval_mode.value:
         session_store.update_session(session_id, {"tool_approval_mode": approval_mode.value})
 
+    # Ensure plain chat sessions also carry workspace publish binding metadata so the
+    # assistant can answer repo-target questions without requiring a sandbox signal.
+    try:
+        binding = load_workspace_binding(project_root=paths.project_root)
+        inferred_repo = infer_publish_repo_from_git_origin(project_root=paths.project_root)
+        resolved_repo = binding.publish_repo or inferred_repo
+
+        session_updates: dict[str, object] = {}
+        if resolved_repo and str(session_meta.get("publish_repo") or "").strip() != resolved_repo:
+            session_updates["publish_repo"] = resolved_repo
+
+        base_branch = str(binding.default_base_branch or "").strip() or "main"
+        if str(session_meta.get("default_base_branch") or "").strip() != base_branch:
+            session_updates["default_base_branch"] = base_branch
+
+        protected = list(binding.protected_branches or ())
+        if session_meta.get("protected_branches") != protected:
+            session_updates["protected_branches"] = protected
+
+        if session_updates:
+            session_store.update_session(session_id, session_updates)
+            session_meta = session_store.get_session(session_id)
+    except Exception:
+        pass
+
     try:
         orchestrator = build_engine_for_session(
             project_root=paths.project_root,
@@ -723,6 +749,32 @@ def _run_chat_line_mode(
         print_replay=print_replay,
         color_mode=color_mode,
     )
+
+
+def _close_chat_engine_runtime(orchestrator: Engine) -> None:
+    """
+    Best-effort cleanup for interactive chat runtime resources.
+    """
+    close_fn = getattr(orchestrator, "close", None)
+    if callable(close_fn):
+        try:
+            close_fn()
+            return
+        except Exception:
+            pass
+
+    close_mcp = getattr(orchestrator, "close_mcp_connections", None)
+    loop = getattr(orchestrator, "_loop", None)
+    if not callable(close_mcp):
+        return
+    if loop is None or not hasattr(loop, "run_until_complete"):
+        return
+    try:
+        if not loop.is_closed() and not loop.is_running():
+            loop.run_until_complete(close_mcp())
+            loop.close()
+    except Exception:
+        return
 
 
 def _run_chat_console_ui(
@@ -1330,6 +1382,7 @@ def _run_chat_console_ui(
     except EventLogAppendError as e:
         ui.emit(UIEvent(UIEventKind.ERROR_RAISED, {"code": "event_log", "message": str(e), "recoverable": False}))
         ui.stop()
+        _close_chat_engine_runtime(orchestrator)
         return EXIT_CONFIG_ERROR
 
     while True:
@@ -1557,9 +1610,11 @@ def _run_chat_console_ui(
     except EventLogAppendError as e:
         ui.emit(UIEvent(UIEventKind.ERROR_RAISED, {"code": "event_log", "message": str(e), "recoverable": False}))
         ui.stop()
+        _close_chat_engine_runtime(orchestrator)
         return EXIT_CONFIG_ERROR
 
     ui.stop()
+    _close_chat_engine_runtime(orchestrator)
     return EXIT_OK
 
 
@@ -1586,6 +1641,7 @@ def _run_chat_basic_line_mode(
         )
     except EventLogAppendError as e:
         print(f"[fatal] {e}", file=sys.stderr)
+        _close_chat_engine_runtime(orchestrator)
         return EXIT_CONFIG_ERROR
 
     assistant_last_char_newline = True
@@ -1650,6 +1706,7 @@ def _run_chat_basic_line_mode(
             )
         except EventLogAppendError as e:
             print(f"[fatal] {e}", file=sys.stderr)
+            _close_chat_engine_runtime(orchestrator)
             return EXIT_CONFIG_ERROR
         except KeyboardInterrupt:
             print("\nCancelled.", file=sys.stderr)
@@ -1659,8 +1716,10 @@ def _run_chat_basic_line_mode(
         event_bus.flush()
     except EventLogAppendError as e:
         print(f"[fatal] {e}", file=sys.stderr)
+        _close_chat_engine_runtime(orchestrator)
         return EXIT_CONFIG_ERROR
 
+    _close_chat_engine_runtime(orchestrator)
     return EXIT_OK
 
 
@@ -2162,20 +2221,57 @@ def _cmd_daemon_start(args: argparse.Namespace) -> int:
             print(str(e), file=sys.stderr)
             return EXIT_ERROR
 
-    # Give the daemon a brief moment to write pid file.
-    deadline = time.time() + 2.0
+    # Give the daemon time to write pid file and transition to running state.
+    # On slower environments this can exceed 2 seconds, so treat "process alive
+    # but not yet ready" as a successful start-in-progress.
+    deadline = time.time() + 5.0
+    running = False
+    exit_code: int | None = None
     while time.time() < deadline:
         if ControlHub.is_running(paths.project_root):
+            running = True
+            break
+        polled = proc.poll()
+        if polled is not None:
+            exit_code = int(polled)
             break
         time.sleep(0.05)
 
+    if exit_code is None:
+        polled = proc.poll()
+        if polled is not None:
+            exit_code = int(polled)
+
+    if running:
+        payload = {
+            "ok": True,
+            "state": "running",
+            "pid": proc.pid,
+            "log": str(log_path),
+        }
+        print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+        return EXIT_OK
+
+    if exit_code is None:
+        payload = {
+            "ok": True,
+            "state": "starting",
+            "pid": proc.pid,
+            "log": str(log_path),
+            "detail": "Daemon process is alive; readiness check still pending. Use `daemon status` to confirm running=true.",
+        }
+        print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+        return EXIT_OK
+
     payload = {
-        "ok": ControlHub.is_running(paths.project_root),
+        "ok": False,
+        "state": "failed",
         "pid": proc.pid,
         "log": str(log_path),
+        "exit_code": exit_code,
     }
     print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
-    return EXIT_OK if bool(payload["ok"]) else EXIT_ERROR
+    return EXIT_ERROR
 
 
 def _cmd_daemon_run(args: argparse.Namespace) -> int:
@@ -2850,7 +2946,9 @@ def _handle_pending_approvals(
 
 
 def _cmd_init(args: argparse.Namespace) -> int:
-    from .runtime.skills import seed_builtin_skills
+    from .runtime.mcp.config import load_mcp_config
+    from .runtime.registry.spec_registry import SpecRegistry
+    from .runtime.skills import SkillStore, seed_builtin_skills
 
     project_root = Path(args.path).expanduser().resolve()
 
@@ -2994,8 +3092,8 @@ def _cmd_init(args: argparse.Namespace) -> int:
                     '      "timeout_s": 60',
                     "    },",
                     '    "linear": {',
-                    '      "_comment": "Official Linear MCP endpoint via stdio remote bridge. Enable after OAuth access is ready.",',
-                    '      "enabled": false,',
+                    '      "_comment": "Official Linear MCP endpoint via stdio remote bridge (enabled by default for Aura agentic flow).",',
+                    '      "enabled": true,',
                     '      "command": "npx",',
                     '      "args": ["-y", "mcp-remote", "https://mcp.linear.app/mcp"],',
                     '      "env": {},',
@@ -3003,8 +3101,8 @@ def _cmd_init(args: argparse.Namespace) -> int:
                     '      "timeout_s": 60',
                     "    },",
                     '    "github": {',
-                    '      "_comment": "GitHub MCP server. Configure env token and enable for automated PR workflows.",',
-                    '      "enabled": false,',
+                    '      "_comment": "GitHub MCP server (enabled by default). Uses GITHUB_TOKEN or gh auth token fallback.",',
+                    '      "enabled": true,',
                     '      "command": "npx",',
                     '      "args": ["-y", "@modelcontextprotocol/server-github"],',
                     '      "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}" },',
@@ -3070,6 +3168,23 @@ def _cmd_init(args: argparse.Namespace) -> int:
         print("Skipped seeding existing skills:")
         for path in skipped:
             print(f"  - {path}")
+
+    # Prebuild the spec catalog snapshot once during init so first chat/daemon startup
+    # can fast-path without scanning the full market tree.
+    try:
+        registry = SpecRegistry(project_root=project_root)
+        mcp_cfg = load_mcp_config(project_root=project_root)
+        registry.refresh_from_runtime(
+            tool_registry=None,
+            skill_store=SkillStore(project_root=project_root),
+            mcp_config=mcp_cfg,
+            include_builtin_subagents=False,
+            include_market_catalog=True,
+            clear_existing=True,
+        )
+        registry.write_catalog_snapshot()
+    except Exception:
+        pass
 
     print(f"Initialized Aura project at {project_root}")
     return EXIT_OK
@@ -3146,3 +3261,7 @@ def _iter_artifact_refs(value: object) -> list[ArtifactRef]:
             out.extend(_iter_artifact_refs(item))
         return out
     return out
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

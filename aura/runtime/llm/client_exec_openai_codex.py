@@ -319,6 +319,28 @@ def _responses_sse_dicts_to_events(
         return
 
     # If the provider ends the stream without a terminal response.completed, surface what we have.
+    # Preserve any tool calls accumulated from response.output_item.done events so they are not
+    # silently dropped (which would cause the engine to see an empty response and fall back to
+    # non-streaming mode).
+    import json as _json_fallback
+
+    fallback_tool_calls: list[ToolCall] = []
+    for _rec in tool_calls_by_output_index.values():
+        _name = str(_rec.get("name") or "")
+        _raw = str(_rec.get("raw") or "{}")
+        try:
+            _parsed = _json_fallback.loads(_raw) if _raw else {}
+        except Exception:
+            _parsed = {}
+        fallback_tool_calls.append(
+            ToolCall(
+                tool_call_id=str(_rec.get("call_id") or ""),
+                name=_name,
+                arguments=_parsed if isinstance(_parsed, dict) else {},
+                raw_arguments=_raw,
+            )
+        )
+
     yield LLMStreamEvent(
         kind=LLMStreamEventKind.COMPLETED,
         response=LLMResponse(
@@ -326,7 +348,7 @@ def _responses_sse_dicts_to_events(
             profile_id=profile_id,
             model="",
             text="".join(text_parts),
-            tool_calls=[],
+            tool_calls=fallback_tool_calls,
             usage=None,
             stop_reason="eof",
             request_id=None,
