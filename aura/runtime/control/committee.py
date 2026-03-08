@@ -396,7 +396,7 @@ class CommitteeCoordinator:
         if record is None:
             record = self.bidding.open(issue_key=issue_key, candidates=candidates)
 
-        collected = self.bidding.collect(issue_key=issue_key, comments=comments)
+        collected = self.bidding.collect(issue_key=issue_key, comments=comments, candidates=candidates)
         record, decision = self.bidding.evaluate(issue_key=issue_key)
 
         result: dict[str, Any] = {
@@ -451,8 +451,9 @@ class CommitteeCoordinator:
 
         if decision.action == "rebid":
             rebid_candidates = candidates or list(record.candidates)
+            wake_signal_ids: list[str] = []
             for agent_id in rebid_candidates:
-                self.signal_bus.send(
+                wake = self.signal_bus.send(
                     from_agent=COMMITTEE_AGENT_ID,
                     to_agent=agent_id,
                     signal_type=SignalType.WAKE,
@@ -465,6 +466,8 @@ class CommitteeCoordinator:
                         "round": int(getattr(record, 'round', 1) or 1),
                     },
                 )
+                wake_signal_ids.append(wake.signal_id)
+            self._persist_wake_signal_ids(issue_key=issue_key, wake_signal_ids=wake_signal_ids)
             self.store.append_activity(
                 event="bidding_rebid_requested",
                 payload={
@@ -472,6 +475,7 @@ class CommitteeCoordinator:
                     "session_id": session_id,
                     "issue_key": issue_key,
                     "candidates": rebid_candidates,
+                    "wake_signal_ids": wake_signal_ids,
                 },
             )
         return result
@@ -500,11 +504,46 @@ class CommitteeCoordinator:
                 loaded = call()
             except TypeError:
                 continue
-            except Exception:
+            except Exception as exc:
+                self.store.append_activity(
+                    event="bid_comment_reader_failed",
+                    payload={
+                        "signal_id": signal.signal_id,
+                        "issue_key": issue_key,
+                        "error": str(exc),
+                    },
+                )
                 return []
             if isinstance(loaded, list):
                 return list(loaded)
         return []
+
+    def _requests_for_issue(self, *, issue_key: str) -> list[CommitteeRequest]:
+        matched: list[CommitteeRequest] = []
+        for request in self.store.list_requests(limit=0):
+            for task in list(getattr(request, "tasks", []) or []):
+                if _clean_text(getattr(task, "issue_key", "")) != issue_key:
+                    continue
+                matched.append(request)
+                break
+        return matched
+
+    def _persist_wake_signal_ids(self, *, issue_key: str, wake_signal_ids: list[str]) -> None:
+        signal_ids = _clean_list(wake_signal_ids)
+        if not signal_ids:
+            return
+        for request in self._requests_for_issue(issue_key=issue_key):
+            merged = _clean_list([*list(getattr(request, "wake_signal_ids", []) or []), *signal_ids])
+            if merged == list(getattr(request, "wake_signal_ids", []) or []):
+                continue
+            self.store.upsert_request(
+                request.model_copy(
+                    update={
+                        "wake_signal_ids": merged,
+                        "updated_at": now_ts_ms(),
+                    }
+                )
+            )
 
     def _candidate_agents_for_issue(self, *, signal: Signal, issue_key: str) -> list[str]:
         payload = signal.payload if isinstance(signal.payload, dict) else {}
@@ -525,8 +564,43 @@ class CommitteeCoordinator:
         for agent_id in list(getattr(record, "candidates", []) or []):
             _add(agent_id)
 
-        for wake in self.signal_bus.query(issue_key=issue_key, signal_type=SignalType.WAKE, include_archive=True, limit=0):
+        requests = self._requests_for_issue(issue_key=issue_key)
+        wake_signal_ids: list[str] = []
+        wake_candidates_found = False
+        for request in requests:
+            for task in list(getattr(request, "tasks", []) or []):
+                if _clean_text(getattr(task, "issue_key", "")) != issue_key:
+                    continue
+                for agent_id in list(getattr(task, "candidate_agents", []) or []):
+                    _add(agent_id)
+            wake_signal_ids.extend(list(getattr(request, "wake_signal_ids", []) or []))
+
+        for wake_signal_id in _clean_list(wake_signal_ids):
+            wake = self.signal_bus.find_signal(wake_signal_id)
+            if wake is None or wake.signal_type is not SignalType.WAKE:
+                continue
+            if _clean_text(wake.issue_key) != issue_key:
+                continue
+            if _clean_text(wake.from_agent) != COMMITTEE_AGENT_ID:
+                continue
             _add(wake.to_agent)
+            wake_candidates_found = True
+
+        if not wake_candidates_found:
+            fallback_wakes = self.signal_bus.query(
+                from_agent=COMMITTEE_AGENT_ID,
+                signal_type=SignalType.WAKE,
+                issue_key=issue_key,
+                include_archive=True,
+                limit=64,
+            )
+            fallback_ids: list[str] = []
+            for wake in fallback_wakes:
+                if _clean_text(wake.to_agent) == COMMITTEE_AGENT_ID:
+                    continue
+                _add(wake.to_agent)
+                fallback_ids.append(wake.signal_id)
+            self._persist_wake_signal_ids(issue_key=issue_key, wake_signal_ids=fallback_ids)
 
         return ordered
 

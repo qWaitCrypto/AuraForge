@@ -1,11 +1,24 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import BinaryIO, Iterator
 
 from ..models.signal import Signal, SignalType
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows fallback
+    fcntl = None  # type: ignore[assignment]
+
+try:
+    import msvcrt
+except ImportError:  # pragma: no cover - POSIX fallback
+    msvcrt = None  # type: ignore[assignment]
 
 
 def _safe_token(value: str) -> str:
@@ -15,6 +28,43 @@ def _safe_token(value: str) -> str:
 def _day_from_ts(timestamp_ms: int) -> str:
     dt = datetime.fromtimestamp(max(0, int(timestamp_ms)) / 1000.0, tz=timezone.utc)
     return dt.strftime("%Y-%m-%d")
+
+
+@contextmanager
+def _exclusive_file_lock(path: Path) -> Iterator[None]:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a+b") as handle:
+        _lock_handle(handle)
+        try:
+            yield
+        finally:
+            _unlock_handle(handle)
+
+
+def _lock_handle(handle: BinaryIO) -> None:
+    if fcntl is not None:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        return
+    if msvcrt is not None:  # pragma: no cover - Windows only
+        handle.seek(0, os.SEEK_END)
+        if handle.tell() == 0:
+            handle.write(b"\0")
+            handle.flush()
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+        return
+    raise RuntimeError("No file locking implementation available.")
+
+
+def _unlock_handle(handle: BinaryIO) -> None:
+    if fcntl is not None:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        return
+    if msvcrt is not None:  # pragma: no cover - Windows only
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        return
+    raise RuntimeError("No file locking implementation available.")
 
 
 class SignalStoreError(RuntimeError):
@@ -30,11 +80,17 @@ class SignalStore:
         self._inbox = self._root / "inbox"
         self._archive = self._root / "archive"
         self._index_path = self._root / "_signal_index.json"
+        self._lock_path = self._root / ".signals.lock"
         self._inbox.mkdir(parents=True, exist_ok=True)
         self._archive.mkdir(parents=True, exist_ok=True)
 
     def _inbox_file(self, agent_id: str) -> Path:
         return self._inbox / f"{_safe_token(agent_id)}.jsonl"
+
+    @contextmanager
+    def _mutation_lock(self) -> Iterator[None]:
+        with _exclusive_file_lock(self._lock_path):
+            yield
 
     def _load_index(self) -> dict[str, str]:
         if not self._index_path.exists():
@@ -109,13 +165,32 @@ class SignalStore:
                 return path
         return None
 
-    def append(self, signal: Signal) -> None:
-        path = self._inbox_file(signal.to_agent)
+    @staticmethod
+    def _signal_json(signal: Signal) -> str:
+        return json.dumps(signal.model_dump(mode="json"), ensure_ascii=False, sort_keys=True)
+
+    def _append_line(self, path: Path, line: str, *, fsync: bool = False) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        line = json.dumps(signal.model_dump(mode="json"), ensure_ascii=False, sort_keys=True)
         with path.open("a", encoding="utf-8") as handle:
             handle.write(line + "\n")
-        self._index_signal(signal_id=signal.signal_id, inbox_file_name=path.name)
+            handle.flush()
+            if fsync:
+                os.fsync(handle.fileno())
+
+    def _write_signal_file(self, path: Path, records: list[Signal]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        with tmp.open("w", encoding="utf-8") as handle:
+            for signal in records:
+                handle.write(self._signal_json(signal) + "\n")
+        tmp.replace(path)
+
+    def append(self, signal: Signal) -> None:
+        path = self._inbox_file(signal.to_agent)
+        line = self._signal_json(signal)
+        with self._mutation_lock():
+            self._append_line(path, line)
+            self._index_signal(signal_id=signal.signal_id, inbox_file_name=path.name)
 
     def read_inbox(self, agent_id: str, *, unconsumed_only: bool = True, limit: int = 20) -> list[Signal]:
         path = self._inbox_file(agent_id)
@@ -144,49 +219,43 @@ class SignalStore:
         if not target:
             raise ValueError("signal_id must be a non-empty string.")
 
-        path = self._lookup_indexed_inbox(target)
-        if path is None:
-            path = self._scan_inbox_path_for_signal(target)
-        if path is None:
-            raise SignalStoreError(f"Signal not found: {target}")
+        with self._mutation_lock():
+            path = self._lookup_indexed_inbox(target)
+            if path is None:
+                path = self._scan_inbox_path_for_signal(target)
+            if path is None:
+                raise SignalStoreError(f"Signal not found: {target}")
 
-        changed = False
-        matched: Signal | None = None
-        records: list[Signal] = []
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
-            try:
-                signal = Signal.model_validate_json(line)
-            except Exception:
-                continue
-            if signal.signal_id == target:
-                if not signal.consumed:
-                    signal = signal.model_copy(update={"consumed": True})
-                    changed = True
-                matched = signal
-            records.append(signal)
+            changed = False
+            matched: Signal | None = None
+            records: list[Signal] = []
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    signal = Signal.model_validate_json(line)
+                except Exception:
+                    continue
+                if signal.signal_id == target:
+                    if not signal.consumed:
+                        signal = signal.model_copy(update={"consumed": True})
+                        changed = True
+                    matched = signal
+                records.append(signal)
 
-        if matched is None:
-            raise SignalStoreError(f"Signal not found: {target}")
+            if matched is None:
+                raise SignalStoreError(f"Signal not found: {target}")
 
-        if not changed:
+            if not changed:
+                self._remove_index(target)
+                return matched
+
+            day = _day_from_ts(matched.created_at)
+            archive_path = self._archive / f"{day}.jsonl"
+            self._append_line(archive_path, self._signal_json(matched), fsync=True)
+            self._write_signal_file(path, records)
             self._remove_index(target)
             return matched
-
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        with tmp.open("w", encoding="utf-8") as handle:
-            for signal in records:
-                handle.write(json.dumps(signal.model_dump(mode="json"), ensure_ascii=False, sort_keys=True) + "\n")
-        tmp.replace(path)
-
-        day = _day_from_ts(matched.created_at)
-        archive_path = self._archive / f"{day}.jsonl"
-        archive_path.parent.mkdir(parents=True, exist_ok=True)
-        with archive_path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(matched.model_dump(mode="json"), ensure_ascii=False, sort_keys=True) + "\n")
-        self._remove_index(target)
-        return matched
 
     def find_by_id(self, signal_id: str) -> Signal | None:
         target = str(signal_id or "").strip()

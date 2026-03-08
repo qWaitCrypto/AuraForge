@@ -215,10 +215,22 @@ class BiddingService:
     def get(self, issue_key: str) -> BiddingRecord | None:
         return self.store.get(issue_key)
 
-    def collect(self, *, issue_key: str, comments: list[Any], now_ms: int | None = None) -> BiddingRecord:
+    def collect(
+        self,
+        *,
+        issue_key: str,
+        comments: list[Any],
+        candidates: list[str] | None = None,
+        now_ms: int | None = None,
+    ) -> BiddingRecord:
         record = self.store.get(issue_key)
+        candidate_list = _clean_list(list(candidates or []))
         if record is None:
-            record = self.open(issue_key=issue_key, candidates=[], now_ms=now_ms)
+            record = self.open(issue_key=issue_key, candidates=candidate_list, now_ms=now_ms)
+        elif candidate_list:
+            merged_candidates = _clean_list([*list(record.candidates), *candidate_list])
+            if merged_candidates != list(record.candidates):
+                record = record.model_copy(update={"candidates": merged_candidates})
 
         # Intentional: one active bid per agent per issue; later bids replace earlier bids from same agent.
         merged: dict[str, BidEntry] = {entry.agent_id: entry for entry in record.bids}

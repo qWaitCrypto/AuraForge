@@ -167,6 +167,7 @@ class AgentRunner:
         self._queues: dict[str, asyncio.Queue[Signal]] = {}
         self._engines: dict[str, Engine] = {}
         self._inflight_signal_ids: set[str] = set()
+        self._sessions_snapshot_dirty = False
 
         self._engine_factory = engine_factory or self._build_engine_for_session
         self._running = False
@@ -179,13 +180,15 @@ class AgentRunner:
         self._next_workspace_reload_ts_ms = 0
         self._reload_workspace_binding_if_due(force=True)
         self._append_metric("runner_started", {"pid": os.getpid()})
-        self._write_sessions_snapshot()
+        self._mark_sessions_snapshot_dirty()
+        self._write_sessions_snapshot(force=True)
         try:
             while self._running:
                 self._reload_workspace_binding_if_due()
                 await self._poll_and_dispatch()
                 self._emit_periodic_bid_check()
                 await self._reap_finished_sessions()
+                self._write_sessions_snapshot()
                 await asyncio.sleep(max(0.1, float(self._config.poll_interval_s)))
         finally:
             await self._shutdown_all()
@@ -333,7 +336,7 @@ class AgentRunner:
                 "issue_key": signal.issue_key,
             },
         )
-        self._write_sessions_snapshot()
+        self._mark_sessions_snapshot_dirty()
         return True
 
     async def _start_agent_session(self, *, agent_id: str) -> bool:
@@ -361,7 +364,8 @@ class AgentRunner:
         try:
             engine = self._engine_factory(session_id)
         except Exception as exc:
-            self._append_metric("agent_start_failed", {"agent_id": agent_id, "error": str(exc)})
+            self._delete_session_record(session_id)
+            self._append_metric("agent_start_failed", {"agent_id": agent_id, "session_id": session_id, "error": str(exc)})
             return False
 
         queue: asyncio.Queue[Signal] = self._queues.get(agent_id) or asyncio.Queue()
@@ -383,7 +387,7 @@ class AgentRunner:
         session.last_active_at = now_ts_ms()
         self._record_session_event(session=session, kind=LogEventKind.SESSION_START, summary="agent session started")
         self._append_metric("agent_started", {"agent_id": agent_id, "session_id": session_id})
-        self._write_sessions_snapshot()
+        self._mark_sessions_snapshot_dirty()
         return True
 
     async def _agent_loop(self, *, agent_id: str) -> None:
@@ -415,7 +419,7 @@ class AgentRunner:
                 session.current_issue_key = signal.issue_key
                 session.sandbox_id = signal.sandbox_id
                 session.last_active_at = now_ts_ms()
-                self._write_sessions_snapshot()
+                self._mark_sessions_snapshot_dirty()
                 handled_ok = False
                 should_consume = False
 
@@ -438,9 +442,11 @@ class AgentRunner:
                         },
                     )
                 finally:
+                    consumed = False
                     if handled_ok and should_consume:
                         try:
                             self._signal_bus.consume(signal.signal_id)
+                            consumed = True
                         except Exception as exc:
                             self._append_metric(
                                 "signal_consume_failed",
@@ -459,7 +465,7 @@ class AgentRunner:
                     session.sandbox_id = None
                     session.state = AgentSessionState.IDLE
                     queue.task_done()
-                    self._write_sessions_snapshot()
+                    self._mark_sessions_snapshot_dirty()
 
                 max_signals = int(self._config.max_signals_per_agent)
                 if max_signals > 0 and session.signals_processed >= max_signals:
@@ -495,7 +501,7 @@ class AgentRunner:
             self._sessions.pop(agent_id, None)
             if queue.empty():
                 self._queues.pop(agent_id, None)
-            self._write_sessions_snapshot()
+            self._mark_sessions_snapshot_dirty()
 
     async def _handle_signal(self, *, agent_id: str, session: AgentSession, engine: Engine, signal: Signal) -> bool:
         publish_repo = self._resolve_publish_repo(signal)
@@ -579,9 +585,8 @@ class AgentRunner:
             if not run.pending_tools:
                 break
             decisions: list[ToolDecision] = []
-            unresolved_pending: list[str] = []
             for pending in run.pending_tools:
-                guardrail_note = self._repo_guardrail_deny_note(
+                guardrail_note = await self._repo_guardrail_deny_note(
                     tool_name=pending.tool_name,
                     tool_args=pending.args,
                     publish_repo=publish_repo,
@@ -613,20 +618,29 @@ class AgentRunner:
                 if action == "approve":
                     decisions.append(ToolDecision(tool_call_id=pending.tool_call_id, decision="approve"))
                     continue
-                if action == "deny":
-                    note = (
-                        f"Runner automatic policy denied tool '{pending.tool_name}' during "
-                        f"{signal.signal_type.value} phase."
+                note = (
+                    f"Runner automatic policy denied tool '{pending.tool_name}' during "
+                    f"{signal.signal_type.value} phase."
+                )
+                decisions.append(
+                    ToolDecision(
+                        tool_call_id=pending.tool_call_id,
+                        decision="deny",
+                        note=note,
                     )
-                    decisions.append(
-                        ToolDecision(
-                            tool_call_id=pending.tool_call_id,
-                            decision="deny",
-                            note=note,
-                        )
-                    )
-                    continue
-                unresolved_pending.append(pending.tool_name)
+                )
+                self._append_metric(
+                    "runner_auto_denied_tool",
+                    {
+                        "agent_id": agent_id,
+                        "session_id": session.session_id,
+                        "signal_id": signal.signal_id,
+                        "run_id": run.run_id,
+                        "tool_name": pending.tool_name,
+                        "tool_call_id": pending.tool_call_id,
+                        "reason": note,
+                    },
+                )
 
             if decisions:
                 run = await engine.continue_run(
@@ -634,18 +648,6 @@ class AgentRunner:
                     decisions=decisions,
                     timeout_s=self._config.op_timeout_s,
                 )
-            if unresolved_pending:
-                self._append_metric(
-                    "approval_manual_required",
-                    {
-                        "agent_id": agent_id,
-                        "session_id": session.session_id,
-                        "signal_id": signal.signal_id,
-                        "run_id": run.run_id,
-                        "pending_tools": unresolved_pending,
-                    },
-                )
-                break
             loops += 1
             if loops >= int(self._config.max_auto_approval_loops):
                 self._append_metric(
@@ -692,7 +694,7 @@ class AgentRunner:
                         "error": str(exc),
                     },
                 )
-        return True
+        return str(run.status or "").lower() == "completed"
 
     async def _reap_finished_sessions(self) -> None:
         for agent_id, task in list(self._tasks.items()):
@@ -703,14 +705,15 @@ class AgentRunner:
                     self._append_metric("agent_task_failed", {"agent_id": agent_id, "error": str(exc)})
                 # Normal cleanup happens in `_agent_loop` finally.
                 self._tasks.pop(agent_id, None)
-        self._write_sessions_snapshot()
+        self._mark_sessions_snapshot_dirty()
 
     async def _shutdown_all(self) -> None:
         self._running = False
         for session in self._sessions.values():
             session.state = AgentSessionState.STOPPING
             session.last_active_at = now_ts_ms()
-        self._write_sessions_snapshot()
+        self._mark_sessions_snapshot_dirty()
+        self._write_sessions_snapshot(force=True)
 
         for task in list(self._tasks.values()):
             if not task.done():
@@ -724,7 +727,8 @@ class AgentRunner:
         self._sessions.clear()
         self._queues.clear()
         self._inflight_signal_ids.clear()
-        self._write_sessions_snapshot()
+        self._mark_sessions_snapshot_dirty()
+        self._write_sessions_snapshot(force=True)
 
     def _build_engine_for_session(self, session_id: str) -> Engine:
         layers = load_model_config_layers_for_dir(self._project_root, require_project=True)
@@ -855,7 +859,7 @@ class AgentRunner:
             return signal
         return signal.model_copy(update={"payload": updated})
 
-    def _repo_guardrail_deny_note(
+    async def _repo_guardrail_deny_note(
         self,
         *,
         tool_name: str,
@@ -883,7 +887,7 @@ class AgentRunner:
             command = str(args.get("command") or args.get("cmd") or "").strip()
             if not command or "git push" not in command:
                 return None
-            target = self._extract_git_push_target_repo(command=command, args=args)
+            target = await self._extract_git_push_target_repo(command=command, args=args)
             target_key = repo_match_key(target)
             if target_key and target_key != expected_key:
                 return (
@@ -919,7 +923,7 @@ class AgentRunner:
                     return repo
         return None
 
-    def _extract_git_push_target_repo(self, *, command: str, args: dict[str, Any]) -> str | None:
+    async def _extract_git_push_target_repo(self, *, command: str, args: dict[str, Any]) -> str | None:
         try:
             tokens = shlex.split(command)
         except Exception:
@@ -938,25 +942,32 @@ class AgentRunner:
                 return repo
             if token == "origin":
                 return self._origin_publish_repo
-            remote_repo = self._repo_for_remote_name(token, cwd=cwd)
+            remote_repo = await self._repo_for_remote_name(token, cwd=cwd)
             if remote_repo:
                 return remote_repo
             break
         return None
 
-    def _repo_for_remote_name(self, remote_name: str, *, cwd: str | None) -> str | None:
-        name = str(remote_name or "").strip()
-        if not name:
-            return None
+    def _remote_lookup_workdir(self, *, cwd: str | None) -> Path:
         workdir = self._project_root
         if isinstance(cwd, str) and cwd.strip():
             raw = Path(cwd.strip())
             candidate = (raw if raw.is_absolute() else (self._project_root / raw)).resolve()
             if candidate.exists() and candidate.is_dir():
                 workdir = candidate
+        return workdir
+
+    async def _repo_for_remote_name(self, remote_name: str, *, cwd: str | None) -> str | None:
+        name = str(remote_name or "").strip()
+        if not name:
+            return None
+        workdir = self._remote_lookup_workdir(cwd=cwd)
+        return await asyncio.to_thread(self._repo_for_remote_name_blocking, remote_name=name, workdir=workdir)
+
+    def _repo_for_remote_name_blocking(self, *, remote_name: str, workdir: Path) -> str | None:
         try:
             proc = subprocess.run(
-                ["git", "remote", "get-url", name],
+                ["git", "remote", "get-url", remote_name],
                 cwd=workdir,
                 text=True,
                 capture_output=True,
@@ -968,7 +979,19 @@ class AgentRunner:
             return None
         return normalize_repo_ref(proc.stdout)
 
-    def _write_sessions_snapshot(self) -> None:
+    def _delete_session_record(self, session_id: str) -> None:
+        path = self._paths.sessions_dir / f"{session_id}.json"
+        try:
+            path.unlink(missing_ok=True)
+        except Exception as exc:
+            self._append_metric("session_cleanup_failed", {"session_id": session_id, "error": str(exc)})
+
+    def _mark_sessions_snapshot_dirty(self) -> None:
+        self._sessions_snapshot_dirty = True
+
+    def _write_sessions_snapshot(self, *, force: bool = False) -> None:
+        if not force and not self._sessions_snapshot_dirty:
+            return
         payload = self.sessions_snapshot()
         tmp = self._sessions_path.with_suffix(".json.tmp")
         tmp.parent.mkdir(parents=True, exist_ok=True)
@@ -977,6 +1000,7 @@ class AgentRunner:
             encoding="utf-8",
         )
         tmp.replace(self._sessions_path)
+        self._sessions_snapshot_dirty = False
 
     def _append_metric(self, event: str, payload: dict[str, Any]) -> None:
         row = {

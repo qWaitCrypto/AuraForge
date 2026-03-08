@@ -29,7 +29,8 @@ class SandboxManager:
         root = project_root.expanduser().resolve()
         self.project_root = root
         self.store = store or SandboxStore(project_root=root)
-        (self.project_root / ".aura" / "sandboxes").mkdir(parents=True, exist_ok=True)
+        self._sandboxes_root = (self.project_root / ".aura" / "sandboxes").resolve()
+        self._sandboxes_root.mkdir(parents=True, exist_ok=True)
 
     def _run_git(self, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
         cmd = ["git", *args]
@@ -53,6 +54,28 @@ class SandboxManager:
 
     def _build_flat_branch(self, *, issue_key: str, agent_id: str, suffix: str) -> str:
         return f"agent-{_slug(issue_key)}-{_slug(agent_id)}-{_slug(suffix)}"
+
+    def _resolve_managed_worktree(self, worktree_path: Path | str) -> Path:
+        raw = Path(str(worktree_path or "").strip())
+        candidate = (self.project_root / raw).resolve()
+        try:
+            candidate.relative_to(self._sandboxes_root)
+        except ValueError as exc:
+            raise SandboxError(f"Sandbox worktree path escapes managed root: {candidate}") from exc
+        return candidate
+
+    def _rollback_created_worktree(self, *, worktree_abs_path: Path, branch: str) -> None:
+        try:
+            if worktree_abs_path.exists():
+                self._run_git("worktree", "remove", str(worktree_abs_path), "--force", check=False)
+        except Exception:
+            pass
+        try:
+            self._run_git("branch", "-D", branch, check=False)
+        except Exception:
+            pass
+        if worktree_abs_path.exists():
+            shutil.rmtree(worktree_abs_path, ignore_errors=True)
 
     def create(
         self,
@@ -98,10 +121,11 @@ class SandboxManager:
         branch = branch_candidates[0]
 
         worktree_rel_path = Path(".aura") / "sandboxes" / sid
-        worktree_abs_path = (self.project_root / worktree_rel_path).resolve()
+        worktree_abs_path = self._resolve_managed_worktree(worktree_rel_path)
 
-        if self.store.load(sid) is not None:
-            return self.store.load(sid)  # type: ignore[return-value]
+        existing = self.store.load(sid)
+        if existing is not None:
+            return existing
 
         if worktree_abs_path.exists() and any(worktree_abs_path.iterdir()):
             raise SandboxError(f"Sandbox worktree path already exists and is not empty: {worktree_abs_path}")
@@ -140,7 +164,11 @@ class SandboxManager:
             branch=branch,
             base_branch=base,
         )
-        self.store.save(sandbox)
+        try:
+            self.store.save(sandbox)
+        except Exception:
+            self._rollback_created_worktree(worktree_abs_path=worktree_abs_path, branch=branch)
+            raise
         return sandbox
 
     def destroy(self, sandbox_id: str) -> None:
@@ -152,7 +180,7 @@ class SandboxManager:
         if sandbox is None:
             raise SandboxError(f"Sandbox not found: {sid}")
 
-        worktree_abs = (self.project_root / sandbox.worktree_path).resolve()
+        worktree_abs = self._resolve_managed_worktree(sandbox.worktree_path)
 
         if worktree_abs.exists():
             self._run_git("worktree", "remove", str(worktree_abs), "--force", check=True)
@@ -178,11 +206,5 @@ class SandboxManager:
     def find_by_agent(self, agent_id: str) -> list[Sandbox]:
         agent = str(agent_id or "").strip()
         out = [item for item in self.store.list_all() if item.agent_id == agent]
-        out.sort(key=lambda item: item.created_at, reverse=True)
-        return out
-
-    def find_by_issue(self, issue_key: str) -> list[Sandbox]:
-        issue = str(issue_key or "").strip()
-        out = [item for item in self.store.list_all() if item.issue_key == issue]
         out.sort(key=lambda item: item.created_at, reverse=True)
         return out
