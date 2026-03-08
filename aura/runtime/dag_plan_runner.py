@@ -13,12 +13,12 @@ from .plan import PlanItem, PlanState, PlanStore, StepStatus
 @dataclass
 class DAGPlanRunner:
     """
-    DAG计划执行器：管理PlanStore → Scheduler的转换和状态同步。
+    DAG plan executor that manages PlanStore -> Scheduler conversion and status sync.
 
-    职责：
-    - 从PlanStore构建DAG图并初始化Scheduler
-    - 跟踪已完成/运行节点，自动更新PlanStore状态
-    - 提供就绪节点查询接口
+    Responsibilities:
+    - Build the DAG from PlanStore and initialize the Scheduler
+    - Track completed and running nodes and mirror state back into PlanStore
+    - Provide a query interface for ready nodes
     """
 
     plan_store: PlanStore
@@ -29,11 +29,11 @@ class DAGPlanRunner:
 
     def refresh_from_store(self) -> None:
         """
-        从PlanStore重建DAG和Scheduler。
+        Rebuild the DAG and Scheduler from PlanStore.
 
-        调用时机：
-        - 首次调用get_dispatchable_nodes()
-        - PlanStore被外部修改后（如主Agent接受了Proposal并调用update_plan）
+        Called when:
+        - get_dispatchable_nodes() runs for the first time
+        - PlanStore is modified externally (for example after the main agent accepts a proposal and calls update_plan)
         """
 
         plan_state = self.plan_store.get()
@@ -47,10 +47,10 @@ class DAGPlanRunner:
 
     def get_dispatchable_nodes(self) -> list[PlanItem]:
         """
-        返回当前可派发的节点列表。
+        Return the list of nodes that are currently dispatchable.
 
         Returns:
-            list[PlanItem]: 就绪且未在运行的节点
+            list[PlanItem]: Ready nodes that are not currently running.
         """
 
         self.refresh_from_store()
@@ -75,7 +75,7 @@ class DAGPlanRunner:
 
     def mark_completed(self, node_id: str, *, node_result: dict[str, Any] | None = None) -> None:
         """
-        标记节点完成，同时更新Scheduler和PlanStore。
+        Mark a node as completed and update both the Scheduler and PlanStore.
         """
 
         if self._scheduler is None:
@@ -109,13 +109,13 @@ class DAGPlanRunner:
         )
 
     def mark_failed(self, node_id: str, error: str, *, node_result: dict[str, Any] | None = None) -> None:
-        """标记节点失败，保留错误信息。"""
+        """Mark a node as failed and preserve the error details."""
         if self._scheduler is None:
             self.refresh_from_store()
         if self._scheduler is None:
             raise RuntimeError("Scheduler not initialized.")
 
-        self._scheduler.mark_completed(node_id)  # 从调度器移除
+        self._scheduler.mark_completed(node_id)  # Remove from the scheduler
 
         plan_state = self.plan_store.get()
         updated_items: list[PlanItem] = []
@@ -139,24 +139,24 @@ class DAGPlanRunner:
         )
 
     def get_goal(self) -> str | None:
-        """获取当前计划的全局目标。"""
+        """Return the global goal for the current plan."""
         return self.plan_store.get().goal
 
     def get_progress_summary(self) -> str:
-        """生成当前进度摘要，用于注入到subagent context。"""
+        """Generate a progress summary for injection into the subagent context."""
         items = self.plan_store.get().plan
         completed = [it for it in items if it.status is StepStatus.COMPLETED]
         failed = [it for it in items if it.status is StepStatus.FAILED]
-        lines = [f"✅ 已完成 {len(completed)}/{len(items)}"]
+        lines = [f"Completed {len(completed)}/{len(items)}"]
         if completed:
-            lines.append("最近完成: " + ", ".join(it.id for it in completed[-3:]))
+            lines.append("Recently completed: " + ", ".join(it.id for it in completed[-3:]))
         if failed:
-            lines.append(f"❌ 失败 {len(failed)}: " + ", ".join(it.id for it in failed))
+            lines.append(f"Failed {len(failed)}: " + ", ".join(it.id for it in failed))
         return "\n".join(lines)
 
     def is_all_done(self) -> bool:
         """
-        检查DAG是否全部完成。
+        Check whether the DAG is fully completed.
         """
 
         plan_state = self.plan_store.get()

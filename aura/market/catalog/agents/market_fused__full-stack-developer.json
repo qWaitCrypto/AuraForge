@@ -38,7 +38,7 @@
     "source_strategy": "shortlist-v1-fused",
     "prompt_ref": "aura/market/catalog/agents/market_fused__full-stack-developer.md",
     "upstream_primary_repo": "claude-code-sub-agents",
-    "upstream_primary_path": "dev/agent预备/claude-code-sub-agents-main/claude-code-sub-agents-main/agents/development/full-stack-developer.md",
+    "upstream_primary_path": "dev/agent-prep/claude-code-sub-agents-main/claude-code-sub-agents-main/agents/development/full-stack-developer.md",
     "upstream_alternates": [],
     "upstream_license": "MIT",
     "upstream_license_path": "aura/market/catalog/licenses/claude-code-sub-agents.MIT.md",

@@ -49,14 +49,14 @@ async def _dispatch_single_node(
     goal: str | None = None,
     progress_summary: str | None = None,
 ) -> NodeDispatchResult:
-    # 构建增强的任务描述，注入全局目标和进度
+    # Build an enhanced task description with the global goal and progress summary.
     if goal or progress_summary:
         enhanced_task = ""
         if goal:
-            enhanced_task += f"## 全局目标\n{goal}\n\n"
+            enhanced_task += f"## Global Goal\n{goal}\n\n"
         if progress_summary:
-            enhanced_task += f"## 当前进度\n{progress_summary}\n\n"
-        enhanced_task += f"## 当前任务\n{node.step}"
+            enhanced_task += f"## Current Progress\n{progress_summary}\n\n"
+        enhanced_task += f"## Current Task\n{node.step}"
     else:
         enhanced_task = node.step
 
@@ -234,8 +234,8 @@ async def dispatch_nodes_parallel(
     Dispatch PlanItem nodes to subagents concurrently.
     
     Args:
-        goal: 全局目标，注入到每个subagent的context中
-        progress_summary: 当前进度摘要，注入到每个subagent的context中
+        goal: Global goal injected into each subagent context.
+        progress_summary: Current progress summary injected into each subagent context.
     """
 
     if not nodes:
@@ -283,18 +283,18 @@ def default_preset_selector(node: PlanItem) -> str:
 
     step_lower = node.step.lower()
 
-    if any(kw in step_lower for kw in ["verify", "check", "validate", "验证", "检查", "对账"]):
+    if any(kw in step_lower for kw in ["verify", "check", "validate", "reconcile"]):
         return "verifier"
     if any(
         kw in step_lower
-        for kw in ["scan", "list", "move", "delete", "rename", "copy", "扫描", "移动", "删除", "重命名", "归档"]
+        for kw in ["scan", "list", "move", "delete", "rename", "copy", "archive"]
     ):
         return "file_ops_worker"
-    if any(kw in step_lower for kw in ["fetch", "search", "web", "网页", "搜索", "抓取", "调研"]):
+    if any(kw in step_lower for kw in ["fetch", "search", "web", "research", "crawl"]):
         return "browser_worker"
-    if any(kw in step_lower for kw in ["document", "report", "write", "文档", "报告", "撰写", "生成"]):
+    if any(kw in step_lower for kw in ["document", "report", "write", "draft", "generate"]):
         return "doc_worker"
-    if any(kw in step_lower for kw in ["sheet", "excel", "csv", "表格", "数据清洗"]):
+    if any(kw in step_lower for kw in ["sheet", "excel", "csv", "spreadsheet", "data cleanup"]):
         return "sheet_worker"
 
     # Default: general-purpose executor with safe project tool access.

@@ -17,7 +17,7 @@
   "metadata": {
     "requires_mcp_servers": ["mcp-obsidian", "atlassian"],
     "upstream_repo": "agents-main",
-    "upstream_path": "dev/agent预备/agents-main/agents-main/plugins/team-collaboration/commands/standup-notes.md",
+    "upstream_path": "dev/agent-prep/agents-main/agents-main/plugins/team-collaboration/commands/standup-notes.md",
     "upstream_license": "MIT",
     "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md"
   }

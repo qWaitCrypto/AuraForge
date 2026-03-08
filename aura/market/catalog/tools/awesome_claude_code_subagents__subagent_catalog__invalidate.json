@@ -16,7 +16,7 @@
   "policy": { "approval_required": false, "scope": [] },
   "metadata": {
     "upstream_repo": "awesome-claude-code-subagents",
-    "upstream_path": "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/tools/subagent-catalog/invalidate.md",
+    "upstream_path": "dev/agent-prep/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/tools/subagent-catalog/invalidate.md",
     "upstream_license": "MIT",
     "upstream_license_path": "aura/market/catalog/licenses/awesome-claude-code-subagents.MIT.md"
   }

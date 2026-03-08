@@ -36,7 +36,7 @@ def _parse_device(args: dict[str, Any]) -> str:
 
 
 def _labels_for_binary_classifier() -> tuple[dict[int, str], dict[int, str]]:
-    labels_zh = {0: "人类", 1: "AI"}
+    labels_zh = {0: "Human", 1: "AI"}
     labels_en = {0: "Human", 1: "AI"}
     return labels_zh, labels_en
 

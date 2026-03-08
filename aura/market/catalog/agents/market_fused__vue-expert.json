@@ -38,13 +38,13 @@
     "source_strategy": "shortlist-v1-fused",
     "prompt_ref": "aura/market/catalog/agents/market_fused__vue-expert.md",
     "upstream_primary_repo": "awesome-claude-code-subagents",
-    "upstream_primary_path": "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/02-language-specialists/vue-expert.md",
+    "upstream_primary_path": "dev/agent-prep/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/02-language-specialists/vue-expert.md",
     "upstream_alternates": [
-      "dev/agent预备/claude-code-subagents-main/claude-code-subagents-main/agents/vue-expert.md"
+      "dev/agent-prep/claude-code-subagents-main/claude-code-subagents-main/agents/vue-expert.md"
     ],
     "upstream_license": "MIT",
     "upstream_license_path": "aura/market/catalog/licenses/awesome-claude-code-subagents.MIT.md",
-    "source_selection_reason": "按来源顺序优先 awesome，且其 Vue3/Nuxt 说明更完整便于首版落地。",
+    "source_selection_reason": "Chosen from the preferred upstream source because it provides the most general-purpose baseline for this role.",
     "relation_profile": "manual-deep-v2",
     "relation_primary_plugin": "javascript_typescript",
     "relation_updated_at": "2026-02-26",

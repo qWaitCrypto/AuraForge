@@ -33,8 +33,8 @@ v2 的方向是对的，但动作过大。
 
 这些模块先视为稳定骨架，不在 v3 首阶段重构：
 
-- `runtime/control_hub.py`
-- `runtime/agent_runner.py`
+- `runtime/control/hub.py`
+- `runtime/control/runner.py`
 - `runtime/control/dispatcher.py`
 - `runtime/engine.py`
 - `runtime/engine_agno_async.py`

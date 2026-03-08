@@ -30,14 +30,14 @@
     "source_strategy": "shortlist-v1-fused",
     "prompt_ref": "aura/market/catalog/agents/market_fused__flutter-expert.md",
     "upstream_primary_repo": "agents-main",
-    "upstream_primary_path": "dev/agent预备/agents-main/agents-main/plugins/multi-platform-apps/agents/flutter-expert.md",
+    "upstream_primary_path": "dev/agent-prep/agents-main/agents-main/plugins/multi-platform-apps/agents/flutter-expert.md",
     "upstream_alternates": [
-      "dev/agent预备/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/02-language-specialists/flutter-expert.md",
-      "dev/agent预备/claude-code-subagents-main/claude-code-subagents-main/agents/flutter-expert.md"
+      "dev/agent-prep/awesome-claude-code-subagents-main/awesome-claude-code-subagents-main/categories/02-language-specialists/flutter-expert.md",
+      "dev/agent-prep/claude-code-subagents-main/claude-code-subagents-main/agents/flutter-expert.md"
     ],
     "upstream_license": "MIT",
     "upstream_license_path": "aura/market/catalog/licenses/agents-main.MIT.md",
-    "source_selection_reason": "优先 agents-main，multi-platform 版本与 Flutter 跨平台定位高度一致。",
+    "source_selection_reason": "Chosen from the preferred upstream source because it provides the most general-purpose baseline for this role.",
     "relation_profile": "manual-deep-v2",
     "relation_primary_plugin": "multi_platform_apps",
     "relation_updated_at": "2026-02-26",

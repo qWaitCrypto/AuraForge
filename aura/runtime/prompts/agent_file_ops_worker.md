@@ -111,14 +111,14 @@ Important tool limitation:
     "by_type": {"move": 0, "rename": 0, "delete": 0, "create": 0, "overwrite": 0},
     "rules_summary": "",
     "items_sample": [
-      {"op": "move", "from": "src/a.txt", "to": "archive/2026-01/a.txt", "reason": "按日期归档"}
+      {"op": "move", "from": "src/a.txt", "to": "archive/2026-01/a.txt", "reason": "Archive by date"}
     ]
   },
   "receipts": [
     {"tool": "project__list_dir", "args_summary": "path=.", "result_summary": "found 120 entries"}
   ],
   "proposals": [
-    {"type": "add_node", "reason": "发现嵌套目录需要递归处理", "spec": {}}
+    {"type": "add_node", "reason": "Nested directories require recursive handling", "spec": {}}
   ],
   "artifacts": [
     {"type": "index", "path": "outputs/file_index.csv"}

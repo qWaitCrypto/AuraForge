@@ -104,7 +104,7 @@ def _blocked_fallback_request(request: CanonicalRequest) -> CanonicalRequest:
     # Some OpenAI-compatible gateways block large system prompts and/or tool schemas.
     # Retrying with a minimal instruction and no tools often succeeds (and matches common curl examples).
     return CanonicalRequest(
-        system="你是一个 AI 助手",
+        system="You are an AI assistant",
         messages=request.messages,
         tools=[],
         params=dict(request.params),

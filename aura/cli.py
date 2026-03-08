@@ -284,7 +284,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     submit_parser.set_defaults(func=_cmd_submit)
 
-    watch_parser = subparsers.add_parser("watch", help="Watch market activity.")
+    watch_parser = subparsers.add_parser("watch", help="Watch daemon progress.")
     watch_parser.add_argument(
         "--refresh",
         dest="refresh_s",
@@ -1987,17 +1987,17 @@ def _cmd_submit(args: argparse.Namespace) -> int:
         payload=payload,
     )
 
-    print(f"✓ 已提交  {signal.signal_id}")
-    print(f"  目标: {goal}")
-    print(f"  优先级: {priority}")
+    print(f"Submitted  {signal.signal_id}")
+    print(f"  Goal: {goal}")
+    print(f"  Priority: {priority}")
     print()
     if ControlHub.is_running(paths.project_root):
-        print("  引擎运行中，委员会将自动处理。")
-        print("  执行 `aura watch` 查看进度。")
+        print("  Daemon is running; committee processing will continue automatically.")
+        print("  Run `aura watch` to follow progress.")
     else:
-        print("  ⚠ 后台引擎未运行")
-        print("  执行 `aura daemon start` 启动引擎")
-        print("  然后 `aura watch` 查看进度")
+        print("  Warning: the background daemon is not running.")
+        print("  Run `aura daemon start` to start the engine.")
+        print("  Then run `aura watch` to follow progress.")
     return EXIT_OK
 
 
