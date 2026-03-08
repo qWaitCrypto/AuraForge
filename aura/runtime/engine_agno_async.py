@@ -957,6 +957,8 @@ class AgnoAsyncEngine:
         if not isinstance(run_args, dict) or not run_args:
             return
 
+        mcp_functions = self._mcp_functions
+
         executed: list[dict[str, Any]] = []
 
         async with AsyncExitStack():
@@ -981,7 +983,7 @@ class AgnoAsyncEngine:
                     tool_call_id=tool_call_id,
                     arguments=dict(t.args),
                 )
-                inspection = self._inspect_tool(planned=planned, mcp_functions=self._mcp_functions)
+                inspection = self._inspect_tool(planned=planned, mcp_functions=mcp_functions)
                 decision = decision_map.get(tool_call_id)
                 tool_message = await self._execute_planned_after_decisions(
                     planned=planned,
@@ -989,7 +991,7 @@ class AgnoAsyncEngine:
                     decision=decision,
                     request_id=request_id,
                     turn_id=turn_id,
-                    mcp_functions=self._mcp_functions,
+                    mcp_functions=mcp_functions,
                 )
                 self._history.append(
                     CanonicalMessage(
@@ -1041,7 +1043,7 @@ class AgnoAsyncEngine:
                 tool_call_id=call_id,
                 arguments=deepcopy(resume_args),
             )
-            inspection_sub = self._inspect_tool(planned=planned_sub, mcp_functions=self._mcp_functions)
+            inspection_sub = self._inspect_tool(planned=planned_sub, mcp_functions=mcp_functions)
             tool_message_sub = await self._execute_planned_after_decisions(
                 planned=planned_sub,
                 inspection=inspection_sub,
@@ -1286,7 +1288,7 @@ class AgnoAsyncEngine:
                     )
 
                 for planned in pending_planned:
-                    inspection = self._inspect_tool(planned=planned, mcp_functions=self._mcp_functions)
+                    inspection = self._inspect_tool(planned=planned, mcp_functions=mcp_functions)
                     tool_message = await self._execute_planned_after_decisions(
                         planned=planned,
                         inspection=inspection,
@@ -1536,7 +1538,7 @@ class AgnoAsyncEngine:
                     )
 
                 for planned in planned_calls:
-                    inspection = self._inspect_tool(planned=planned, mcp_functions=self._mcp_functions)
+                    inspection = self._inspect_tool(planned=planned, mcp_functions=mcp_functions)
                     tool_message = await self._execute_planned_after_decisions(
                         planned=planned,
                         inspection=inspection,
@@ -2539,7 +2541,7 @@ class AgnoAsyncEngine:
         model_profile_id: str | None,
     ) -> bool:
         for planned in planned_calls:
-            inspection = self._inspect_tool(planned=planned, mcp_functions=self._mcp_functions)
+            inspection = self._inspect_tool(planned=planned, mcp_functions=mcp_functions)
             if inspection.decision is InspectionDecision.REQUIRE_APPROVAL and planned.tool_call_id not in decision_map:
                 await self._pause_run(
                     request_id=request_id,
